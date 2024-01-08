@@ -2,6 +2,7 @@ const std = @import("std");
 const Chunk = @import("./chunk.zig").Chunk;
 const OpCode = @import("./chunk.zig").OpCode;
 const Value = @import("./value.zig").Value;
+const compile = @import("./compiler.zig").compile;
 const PrintValue = @import("./value.zig").printValue;
 const debug = @import("./debug.zig");
 const debug_trace_execution = debug.debug_trace_execution;
@@ -26,11 +27,11 @@ pub const VM = struct {
         _ = self;
     }
 
-    pub fn interpret(self: *VM, chunk: *Chunk) InterpretResult {
-        self.chunk = chunk;
-        self.ip = 0;
+    pub fn interpret(self: *VM, source: []const u8) InterpretResult {
+        _ = self;
+        compile(source);
 
-        return self.run();
+        return InterpretResult.INTERPRET_OK;
     }
 
     pub fn push(self: *VM, value: Value) void {
