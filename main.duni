@@ -1,0 +1,30 @@
+module main
+
+from std import * as std
+export [main/1]
+
+struct Person {
+	name string = "tzelon",
+    last string = "machluf",
+    age number = 24
+}
+
+fn main(args string[]) {
+	name = "tzelon"
+
+    std.debug.print(say_hello(name))
+
+	get "route", base_controller
+}
+
+
+fn say_hello(name string) string {
+	"hello {name}"
+}
+
+
+macro get(path string, controller fn) {
+	fn get_route() {
+		"somthing"
+	}
+}

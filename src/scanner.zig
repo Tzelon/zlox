@@ -5,7 +5,7 @@ pub const Scanner = struct {
     current: usize,
     line: i32,
 
-    const TokenType = enum {
+    pub const TokenType = enum {
 
         // Single-character tokens.
         TOKEN_LEFT_PAREN,
@@ -54,7 +54,7 @@ pub const Scanner = struct {
         TOKEN_EOF,
     };
 
-    const Token = struct { type: TokenType, lexeme: []const u8, line: i32 };
+    pub const Token = struct { type: TokenType, lexeme: []const u8, line: i32 };
 
     pub fn init(source: []const u8) Scanner {
         return Scanner{ .start = source, .current = 0, .line = 1 };
@@ -245,7 +245,7 @@ pub const Scanner = struct {
         return true;
     }
 
-    fn advance(self: *Scanner) u8 {
+    pub fn advance(self: *Scanner) u8 {
         self.current += 1;
         return self.start[self.current - 1];
     }

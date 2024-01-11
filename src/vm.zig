@@ -1,4 +1,5 @@
 const std = @import("std");
+const Allocator = std.mem.Allocator;
 const Chunk = @import("./chunk.zig").Chunk;
 const OpCode = @import("./chunk.zig").OpCode;
 const Value = @import("./value.zig").Value;
@@ -17,9 +18,10 @@ pub const VM = struct {
     ip: usize,
     stack: [STACK_MAX]Value = undefined,
     stack_top: usize = 0,
+    allocator: Allocator,
 
-    pub fn init() VM {
-        var vm = VM{ .chunk = undefined, .ip = undefined };
+    pub fn init(allocator: Allocator) VM {
+        var vm = VM{ .allocator = allocator, .chunk = undefined, .ip = undefined };
         return vm;
     }
 
@@ -28,10 +30,19 @@ pub const VM = struct {
     }
 
     pub fn interpret(self: *VM, source: []const u8) InterpretResult {
-        _ = self;
-        compile(source);
+        var chunk = Chunk.init(self.allocator);
+        defer chunk.deinit();
 
-        return InterpretResult.INTERPRET_OK;
+        if (!compile(source, &chunk)) {
+            return .INTERPRET_COMPILE_ERROR;
+        }
+
+        self.chunk = &chunk;
+        self.ip = 0;
+
+        var result: InterpretResult = self.run();
+
+        return result;
     }
 
     pub fn push(self: *VM, value: Value) void {

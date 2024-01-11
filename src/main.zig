@@ -21,7 +21,7 @@ pub fn main() !void {
     }
 
     if (args.len == 1) {
-        try repl();
+        try repl(allocator);
     } else if (args.len == 2) {
         try runFile(allocator, args[1]);
     } else {
@@ -30,8 +30,8 @@ pub fn main() !void {
     }
 }
 
-fn repl() !void {
-    var vm = VM.init();
+fn repl(allocator: Allocator) !void {
+    var vm = VM.init(allocator);
     defer vm.deinit();
     var buf = std.io.bufferedReader(stdin);
     var reader = buf.reader();
@@ -53,7 +53,7 @@ fn repl() !void {
 }
 
 fn runFile(allocator: Allocator, path: []const u8) !void {
-    var vm = VM.init();
+    var vm = VM.init(allocator);
     defer vm.deinit();
     const source = try std.fs.cwd().readFileAlloc(allocator, path, 1_000_000);
     defer allocator.free(source);
