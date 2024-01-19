@@ -3,7 +3,7 @@ const std = @import("std");
 pub const Scanner = struct {
     start: []const u8,
     current: usize,
-    line: i32,
+    line: usize,
 
     pub const TokenType = enum {
 
@@ -54,7 +54,7 @@ pub const Scanner = struct {
         TOKEN_EOF,
     };
 
-    pub const Token = struct { type: TokenType, lexeme: []const u8, line: i32 };
+    pub const Token = struct { type: TokenType, lexeme: []const u8, line: usize };
 
     pub fn init(source: []const u8) Scanner {
         return Scanner{ .start = source, .current = 0, .line = 1 };

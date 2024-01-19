@@ -58,7 +58,7 @@ pub const VM = struct {
     fn run(self: *VM) InterpretResult {
         return while (true) {
             if (comptime debug_trace_execution) {
-                std.debug.print("       ", .{});
+                std.debug.print("   STACK: ", .{});
                 for (self.stack[0..self.stack_top]) |slot| {
                     std.debug.print("[ ", .{});
                     try PrintValue(slot);
@@ -98,7 +98,6 @@ pub const VM = struct {
                 OpCode.OP_CONSTANT => {
                     var constant: Value = self.chunk.constants.items[self.readByte()];
                     self.push(constant);
-                    std.debug.print("\n", .{});
                     continue;
                 },
                 else => {

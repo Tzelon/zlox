@@ -3,7 +3,8 @@ const Chunk = @import("./chunk.zig").Chunk;
 const OpCode = @import("./chunk.zig").OpCode;
 const printValue = @import("./Value.zig").printValue;
 
-pub const debug_trace_execution = true;
+pub const debug_trace_execution = false;
+pub const debug_print_code = true;
 
 pub fn disassembleChunk(chunk: *Chunk, name: []const u8) void {
     std.debug.print("=== {s} ===\n", .{name});
@@ -12,6 +13,8 @@ pub fn disassembleChunk(chunk: *Chunk, name: []const u8) void {
     while (offset < chunk.code.items.len) {
         offset = disassembleInstruction(chunk, offset);
     }
+
+    std.debug.print("\n", .{});
 }
 
 pub fn disassembleInstruction(chunk: *Chunk, offset: usize) usize {
@@ -20,7 +23,7 @@ pub fn disassembleInstruction(chunk: *Chunk, offset: usize) usize {
     if (offset > 0 and chunk.lines.items[offset] == chunk.lines.items[offset - 1]) {
         std.debug.print("  | ", .{});
     } else {
-        std.debug.print("{d} ", .{chunk.lines.items[offset]});
+        std.debug.print("  {d} ", .{chunk.lines.items[offset]});
     }
 
     const instruction = OpCode.fromU8(chunk.code.items[offset]);

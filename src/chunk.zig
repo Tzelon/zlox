@@ -29,10 +29,10 @@ pub const Chunk = struct {
     // array of values to be stored
     constants: std.ArrayList(Value),
     // array of line number, each number in the array is the line number of the corresponding byte in the bytecode.
-    lines: std.ArrayList(u8),
+    lines: std.ArrayList(usize),
 
     pub fn init(allocator: Allocator) Chunk {
-        return Chunk{ .code = std.ArrayList(u8).init(allocator), .lines = std.ArrayList(u8).init(allocator), .constants = std.ArrayList(Value).init(allocator) };
+        return Chunk{ .code = std.ArrayList(u8).init(allocator), .lines = std.ArrayList(usize).init(allocator), .constants = std.ArrayList(Value).init(allocator) };
     }
 
     pub fn deinit(self: *Chunk) void {
@@ -41,12 +41,15 @@ pub const Chunk = struct {
         self.constants.deinit();
     }
 
-    pub fn writeCode(self: *Chunk, byte: u8, line: u8) !void {
+    /// write code into chunk with line number
+    pub fn writeCode(self: *Chunk, byte: u8, line: usize) !void {
         try self.code.append(byte);
         try self.lines.append(line);
     }
 
-    pub fn writeOpCode(self: *Chunk, opcode: OpCode, line: u8) !void {
+    /// write OpCode into chunk with line number.
+    /// convert the OpCode to u8 before inset it to the chunk
+    pub fn writeOpCode(self: *Chunk, opcode: OpCode, line: usize) !void {
         try self.writeCode(opcode.toU8(), line);
     }
 
