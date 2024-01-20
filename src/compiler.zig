@@ -178,6 +178,14 @@ const Compiler = struct {
         }
     }
 
+    fn literal(self: *Compiler) void {
+        switch (self.parser.previous.type) {
+            TokenType.TOKEN_FALSE => self.emitOp(OpCode.OP_FALSE),
+            TokenType.TOKEN_TRUE => self.emitOp(OpCode.OP_TRUE),
+            TokenType.TOKEN_NIL => self.emitOp(OpCode.OP_NIL),
+            else => unreachable,
+        }
+    }
     // assuming we consumed the initial '(', we call the expression function and expect to have the closing ')' after.
     fn grouping(self: *Compiler) void {
         self.expression();
@@ -193,6 +201,7 @@ const Compiler = struct {
         // emit the operator instruction.
         switch (operatorType) {
             TokenType.TOKEN_MINUS => self.emitOp(OpCode.OP_NEGATE),
+            TokenType.TOKEN_BANG => self.emitOp(OpCode.OP_NOT),
             else => {
                 unreachable;
             },
@@ -229,7 +238,7 @@ const Compiler = struct {
             TokenType.TOKEN_SEMICOLON => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_SLASH => comptime ParseRule.init(null, Compiler.binary, Precedence.PREC_FACTOR),
             TokenType.TOKEN_STAR => comptime ParseRule.init(null, Compiler.binary, Precedence.PREC_FACTOR),
-            TokenType.TOKEN_BANG => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
+            TokenType.TOKEN_BANG => comptime ParseRule.init(Compiler.unary, null, Precedence.PREC_NONE),
             TokenType.TOKEN_BANG_EQUAL => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_EQUAL => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_EQUAL_EQUAL => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
@@ -243,17 +252,17 @@ const Compiler = struct {
             TokenType.TOKEN_AND => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_CLASS => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_ELSE => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
-            TokenType.TOKEN_FALSE => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
+            TokenType.TOKEN_FALSE => comptime ParseRule.init(Compiler.literal, null, Precedence.PREC_NONE),
             TokenType.TOKEN_FOR => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_FUN => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_IF => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
-            TokenType.TOKEN_NIL => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
+            TokenType.TOKEN_NIL => comptime ParseRule.init(Compiler.literal, null, Precedence.PREC_NONE),
             TokenType.TOKEN_OR => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_PRINT => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_RETURN => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_SUPER => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_THIS => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
-            TokenType.TOKEN_TRUE => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
+            TokenType.TOKEN_TRUE => comptime ParseRule.init(Compiler.literal, null, Precedence.PREC_NONE),
             TokenType.TOKEN_VAR => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_WHILE => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_ERROR => comptime ParseRule.init(null, null, Precedence.PREC_NONE),

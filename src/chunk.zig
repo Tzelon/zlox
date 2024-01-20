@@ -11,6 +11,10 @@ pub const OpCode = enum(u8) {
     OP_SUBTRACT,
     OP_MULTIPLY,
     OP_DIVIDE,
+    OP_NIL,
+    OP_TRUE,
+    OP_FALSE,
+    OP_NOT,
     ELSE,
 
     pub fn toU8(self: OpCode) u8 {

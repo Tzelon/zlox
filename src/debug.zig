@@ -35,6 +35,10 @@ pub fn disassembleInstruction(chunk: *Chunk, offset: usize) usize {
         OpCode.OP_MULTIPLY => simpleInstruction("OP_MULTIPLY", offset),
         OpCode.OP_DIVIDE => simpleInstruction("OP_DIVIDE", offset),
         OpCode.OP_RETURN => simpleInstruction("OP_RETURN", offset),
+        OpCode.OP_NIL => simpleInstruction("OP_NIL", offset),
+        OpCode.OP_TRUE => simpleInstruction("OP_TRUE", offset),
+        OpCode.OP_FALSE => simpleInstruction("OP_FALSE", offset),
+        OpCode.OP_NOT => simpleInstruction("OP_NOT", offset),
         else => {
             std.debug.print("Unkown opcode {any}\n", .{instruction});
             return offset + 1;

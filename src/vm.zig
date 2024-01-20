@@ -107,6 +107,22 @@ pub const VM = struct {
                     self.push(constant);
                     continue;
                 },
+                OpCode.OP_NIL => {
+                    self.push(Value.fromNil());
+                    continue;
+                },
+                OpCode.OP_TRUE => {
+                    self.push(Value.fromBool(true));
+                    continue;
+                },
+                OpCode.OP_FALSE => {
+                    self.push(Value.fromBool(false));
+                    continue;
+                },
+                OpCode.OP_NOT => {
+                    self.push(Value.fromBool(isFalsey(self.pop())));
+                    continue;
+                },
                 else => {
                     std.debug.print("uknown instruction", .{});
                     return InterpretError.COMPILE_ERROR;
@@ -117,6 +133,14 @@ pub const VM = struct {
 
     fn peek(self: *VM, distance: usize) Value {
         return self.stack[self.stack_top - 1 - distance];
+    }
+
+    fn isFalsey(value: Value) bool {
+        return switch (value) {
+            .nil => true,
+            .boolean => |val| !val,
+            else => false,
+        };
     }
 
     fn runtimeError(self: *VM, comptime message: []const u8, args: anytype) void {
