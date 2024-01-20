@@ -170,7 +170,7 @@ const Compiler = struct {
 
     fn number(self: *Compiler) void {
         if (std.fmt.parseFloat(f64, self.parser.previous.lexeme)) |value| {
-            self.emitConstant(value);
+            self.emitConstant(Value.fromNumber(value));
         } else |e| switch (e) {
             std.fmt.ParseFloatError.InvalidCharacter => {
                 std.debug.print("cound not parse number", .{});

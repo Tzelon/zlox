@@ -48,7 +48,7 @@ fn repl(allocator: Allocator) !void {
             break;
         };
 
-        _ = vm.interpret(line);
+        _ = try vm.interpret(line);
     }
 }
 
@@ -58,7 +58,7 @@ fn runFile(allocator: Allocator, path: []const u8) !void {
     const source = try std.fs.cwd().readFileAlloc(allocator, path, 1_000_000);
     defer allocator.free(source);
 
-    _ = vm.interpret(source);
+    _ = try vm.interpret(source);
 }
 
 test "simple test" {

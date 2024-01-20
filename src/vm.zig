@@ -4,12 +4,14 @@ const Chunk = @import("./chunk.zig").Chunk;
 const OpCode = @import("./chunk.zig").OpCode;
 const Value = @import("./value.zig").Value;
 const compile = @import("./compiler.zig").compile;
-const PrintValue = @import("./value.zig").printValue;
 const debug = @import("./debug.zig");
 const debug_trace_execution = debug.debug_trace_execution;
 
 const BinaryOp = enum { ADD, SUB, MUL, DIV };
-const InterpretResult = enum { INTERPRET_OK, INTERPRET_COMPILE_ERROR, INTERPRET_RUNTIME_ERROR };
+pub const InterpretError = error{ COMPILE_ERROR, RUNTIME_ERROR };
+const InterpretResult = enum {
+    INTERPRET_OK,
+};
 const STACK_MAX = 256;
 
 pub const VM = struct {
@@ -29,18 +31,18 @@ pub const VM = struct {
         _ = self;
     }
 
-    pub fn interpret(self: *VM, source: []const u8) InterpretResult {
+    pub fn interpret(self: *VM, source: []const u8) InterpretError!InterpretResult {
         var chunk = Chunk.init(self.allocator);
         defer chunk.deinit();
 
         if (!compile(source, &chunk)) {
-            return .INTERPRET_COMPILE_ERROR;
+            return InterpretError.COMPILE_ERROR;
         }
 
         self.chunk = &chunk;
         self.ip = 0;
 
-        var result: InterpretResult = self.run();
+        var result = try self.run();
 
         return result;
     }
@@ -55,13 +57,13 @@ pub const VM = struct {
         return self.stack[self.stack_top];
     }
 
-    fn run(self: *VM) InterpretResult {
+    fn run(self: *VM) InterpretError!InterpretResult {
         return while (true) {
             if (comptime debug_trace_execution) {
                 std.debug.print("   STACK: ", .{});
                 for (self.stack[0..self.stack_top]) |slot| {
                     std.debug.print("[ ", .{});
-                    try PrintValue(slot);
+                    try slot.printValue();
                     std.debug.print(" ]", .{});
                 }
 
@@ -71,28 +73,33 @@ pub const VM = struct {
             var instruction = OpCode.fromU8(self.readByte());
             switch (instruction) {
                 OpCode.OP_RETURN => {
-                    try PrintValue(self.pop());
+                    // try PrintValue(self.pop());
+                    try self.pop().printValue();
                     std.debug.print("\n", .{});
                     break InterpretResult.INTERPRET_OK;
                 },
                 OpCode.OP_NEGATE => {
-                    self.push(-self.pop());
+                    if (!self.peek(0).isA(.number)) {
+                        self.runtimeError("Operand must be a number.", .{});
+                        return InterpretError.RUNTIME_ERROR;
+                    }
+                    self.push(Value.fromNumber(-self.pop().number));
                     continue;
                 },
                 OpCode.OP_ADD => {
-                    self.binaryOp(.ADD);
+                    try self.binaryOp(.ADD);
                     continue;
                 },
                 OpCode.OP_SUBTRACT => {
-                    self.binaryOp(.SUB);
+                    try self.binaryOp(.SUB);
                     continue;
                 },
                 OpCode.OP_MULTIPLY => {
-                    self.binaryOp(.MUL);
+                    try self.binaryOp(.MUL);
                     continue;
                 },
                 OpCode.OP_DIVIDE => {
-                    self.binaryOp(.DIV);
+                    try self.binaryOp(.DIV);
                     continue;
                 },
                 OpCode.OP_CONSTANT => {
@@ -102,15 +109,40 @@ pub const VM = struct {
                 },
                 else => {
                     std.debug.print("uknown instruction", .{});
-                    return InterpretResult.INTERPRET_COMPILE_ERROR;
+                    return InterpretError.COMPILE_ERROR;
                 },
             }
         };
     }
 
-    inline fn binaryOp(self: *VM, comptime op: BinaryOp) void {
-        const rhs = self.pop();
-        const lhs = self.pop();
+    fn peek(self: *VM, distance: usize) Value {
+        return self.stack[self.stack_top - 1 - distance];
+    }
+
+    fn runtimeError(self: *VM, comptime message: []const u8, args: anytype) void {
+        const err_writer = std.io.getStdErr().writer();
+
+        err_writer.print(message ++ ".\n", args) catch {};
+
+        const instruction = self.ip - 1;
+        const line = self.chunk.lines.items[instruction];
+        err_writer.print("[line {d}] in script\n", .{line}) catch {};
+
+        self.resetStack();
+    }
+
+    fn resetStack(self: *VM) void {
+        self.stack_top = 0;
+    }
+
+    inline fn binaryOp(self: *VM, comptime op: BinaryOp) InterpretError!void {
+        if (!self.peek(0).isA(.number) or !self.peek(1).isA(.number)) {
+            self.runtimeError("Operands must be numbers", .{});
+            return InterpretError.RUNTIME_ERROR;
+        }
+
+        const rhs = self.pop().number;
+        const lhs = self.pop().number;
 
         const res = switch (op) {
             .ADD => lhs + rhs,
@@ -119,7 +151,7 @@ pub const VM = struct {
             .DIV => lhs / rhs,
         };
 
-        self.push(res);
+        self.push(Value.fromNumber(res));
     }
 
     fn readByte(self: *VM) u8 {
