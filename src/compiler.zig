@@ -136,13 +136,13 @@ const Compiler = struct {
         };
     }
 
-    fn emitUnartyOp(self: *Compiler, opcode: OpCode, byte: u8) void {
+    fn emitUnaryOp(self: *Compiler, opcode: OpCode, byte: u8) void {
         self.emitOp(opcode);
         self.emitByte(byte);
     }
 
     fn emitConstant(self: *Compiler, value: Value) void {
-        self.emitUnartyOp(OpCode.OP_CONSTANT, self.makeConstant(value));
+        self.emitUnaryOp(OpCode.OP_CONSTANT, self.makeConstant(value));
     }
 
     fn emitReturn(self: *Compiler) void {
@@ -218,6 +218,21 @@ const Compiler = struct {
             .TOKEN_MINUS => self.emitOp(OpCode.OP_SUBTRACT),
             .TOKEN_STAR => self.emitOp(OpCode.OP_MULTIPLY),
             .TOKEN_SLASH => self.emitOp(OpCode.OP_DIVIDE),
+            .TOKEN_BANG_EQUAL => {
+                self.emitOp(OpCode.OP_EQUAL);
+                self.emitOp(OpCode.OP_NOT);
+            },
+            .TOKEN_EQUAL_EQUAL => self.emitOp(OpCode.OP_EQUAL),
+            .TOKEN_GREATER => self.emitOp(OpCode.OP_GREATER),
+            .TOKEN_GREATER_EQUAL => {
+                self.emitOp(OpCode.OP_LESS);
+                self.emitOp(OpCode.OP_NOT);
+            },
+            .TOKEN_LESS => self.emitOp(OpCode.OP_LESS),
+            .TOKEN_LESS_EQUAL => {
+                self.emitOp(OpCode.OP_GREATER);
+                self.emitOp(OpCode.OP_NOT);
+            },
             else => {
                 unreachable;
             },
@@ -239,13 +254,13 @@ const Compiler = struct {
             TokenType.TOKEN_SLASH => comptime ParseRule.init(null, Compiler.binary, Precedence.PREC_FACTOR),
             TokenType.TOKEN_STAR => comptime ParseRule.init(null, Compiler.binary, Precedence.PREC_FACTOR),
             TokenType.TOKEN_BANG => comptime ParseRule.init(Compiler.unary, null, Precedence.PREC_NONE),
-            TokenType.TOKEN_BANG_EQUAL => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
+            TokenType.TOKEN_BANG_EQUAL => comptime ParseRule.init(null, Compiler.binary, Precedence.PREC_EQUALITY),
             TokenType.TOKEN_EQUAL => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
-            TokenType.TOKEN_EQUAL_EQUAL => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
-            TokenType.TOKEN_GREATER => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
-            TokenType.TOKEN_GREATER_EQUAL => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
-            TokenType.TOKEN_LESS => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
-            TokenType.TOKEN_LESS_EQUAL => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
+            TokenType.TOKEN_EQUAL_EQUAL => comptime ParseRule.init(null, Compiler.binary, Precedence.PREC_EQUALITY),
+            TokenType.TOKEN_GREATER => comptime ParseRule.init(null, Compiler.binary, Precedence.PREC_COMPARISON),
+            TokenType.TOKEN_GREATER_EQUAL => comptime ParseRule.init(null, Compiler.binary, Precedence.PREC_COMPARISON),
+            TokenType.TOKEN_LESS => comptime ParseRule.init(null, Compiler.binary, Precedence.PREC_COMPARISON),
+            TokenType.TOKEN_LESS_EQUAL => comptime ParseRule.init(null, Compiler.binary, Precedence.PREC_COMPARISON),
             TokenType.TOKEN_IDENTIFIER => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_STRING => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_NUMBER => comptime ParseRule.init(Compiler.number, null, Precedence.PREC_NONE),

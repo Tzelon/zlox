@@ -39,6 +39,9 @@ pub fn disassembleInstruction(chunk: *Chunk, offset: usize) usize {
         OpCode.OP_TRUE => simpleInstruction("OP_TRUE", offset),
         OpCode.OP_FALSE => simpleInstruction("OP_FALSE", offset),
         OpCode.OP_NOT => simpleInstruction("OP_NOT", offset),
+        OpCode.OP_EQUAL => simpleInstruction("OP_EQUAL", offset),
+        OpCode.OP_GREATER => simpleInstruction("OP_GREATER", offset),
+        OpCode.OP_LESS => simpleInstruction("OP_LESS", offset),
         else => {
             std.debug.print("Unkown opcode {any}\n", .{instruction});
             return offset + 1;

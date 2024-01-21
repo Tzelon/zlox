@@ -7,7 +7,7 @@ const compile = @import("./compiler.zig").compile;
 const debug = @import("./debug.zig");
 const debug_trace_execution = debug.debug_trace_execution;
 
-const BinaryOp = enum { ADD, SUB, MUL, DIV };
+const BinaryOp = enum { ADD, SUB, MUL, DIV, LESS, GREATER };
 pub const InterpretError = error{ COMPILE_ERROR, RUNTIME_ERROR };
 const InterpretResult = enum {
     INTERPRET_OK,
@@ -86,6 +86,14 @@ pub const VM = struct {
                     self.push(Value.fromNumber(-self.pop().number));
                     continue;
                 },
+                OpCode.OP_GREATER => {
+                    try self.binaryOp(.GREATER);
+                    continue;
+                },
+                OpCode.OP_LESS => {
+                    try self.binaryOp(.LESS);
+                    continue;
+                },
                 OpCode.OP_ADD => {
                     try self.binaryOp(.ADD);
                     continue;
@@ -117,6 +125,12 @@ pub const VM = struct {
                 },
                 OpCode.OP_FALSE => {
                     self.push(Value.fromBool(false));
+                    continue;
+                },
+                OpCode.OP_EQUAL => {
+                    const b = self.pop();
+                    const a = self.pop();
+                    self.push(Value.fromBool(a.equal(b)));
                     continue;
                 },
                 OpCode.OP_NOT => {
@@ -168,14 +182,14 @@ pub const VM = struct {
         const rhs = self.pop().number;
         const lhs = self.pop().number;
 
-        const res = switch (op) {
-            .ADD => lhs + rhs,
-            .SUB => lhs - rhs,
-            .MUL => lhs * rhs,
-            .DIV => lhs / rhs,
-        };
-
-        self.push(Value.fromNumber(res));
+        switch (op) {
+            .ADD => self.push(Value.fromNumber(lhs + rhs)),
+            .SUB => self.push(Value.fromNumber(lhs - rhs)),
+            .MUL => self.push(Value.fromNumber(lhs * rhs)),
+            .DIV => self.push(Value.fromNumber(lhs / rhs)),
+            .GREATER => self.push(Value.fromBool(lhs > rhs)),
+            .LESS => self.push(Value.fromBool(lhs < rhs)),
+        }
     }
 
     fn readByte(self: *VM) u8 {

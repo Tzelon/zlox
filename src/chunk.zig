@@ -15,6 +15,9 @@ pub const OpCode = enum(u8) {
     OP_TRUE,
     OP_FALSE,
     OP_NOT,
+    OP_EQUAL,
+    OP_GREATER,
+    OP_LESS,
     ELSE,
 
     pub fn toU8(self: OpCode) u8 {
