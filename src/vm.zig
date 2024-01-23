@@ -35,7 +35,7 @@ pub const VM = struct {
         var chunk = Chunk.init(self.allocator);
         defer chunk.deinit();
 
-        if (!compile(source, &chunk)) {
+        if (!compile(self, source, &chunk)) {
             return InterpretError.COMPILE_ERROR;
         }
 

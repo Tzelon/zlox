@@ -4,17 +4,19 @@ const TokenType = Scanner.TokenType;
 const Token = Scanner.Token;
 const Chunk = @import("./chunk.zig").Chunk;
 const OpCode = @import("./chunk.zig").OpCode;
+const VM = @import("./vm.zig").VM;
 const Value = @import("./value.zig").Value;
+const Obj = @import("./object.zig").Obj;
 const debug = @import("./debug.zig");
 
 const errout = std.io.getStdErr().writer();
 var compilingChunk: *Chunk = undefined;
 
-pub fn compile(source: []const u8, chunk: *Chunk) bool {
+pub fn compile(vm: *VM, source: []const u8, chunk: *Chunk) bool {
     compilingChunk = chunk;
     var scanner = Scanner.init(source);
     var parser = Parser.init(&scanner);
-    var compiler = Compiler.init(&parser);
+    var compiler = Compiler.init(vm, &parser);
     parser.advance();
     compiler.expression();
     // parser.consume(TokenType.TOKEN_EOF, "Expect end of expression.");
@@ -85,6 +87,7 @@ const ParseFn = *const fn (compiler: *Compiler) void;
 
 const Compiler = struct {
     parser: *Parser,
+    vm: *VM,
 
     const ParseRule = struct {
         prefix: ?ParseFn,
@@ -110,8 +113,8 @@ const Compiler = struct {
         PREC_PRIMARY,
     };
 
-    pub fn init(parser: *Parser) Compiler {
-        return Compiler{ .parser = parser };
+    pub fn init(vm: *VM, parser: *Parser) Compiler {
+        return Compiler{ .vm = vm, .parser = parser };
     }
 
     pub fn deinit(self: *Compiler) void {
@@ -176,6 +179,12 @@ const Compiler = struct {
                 std.debug.print("cound not parse number", .{});
             },
         }
+    }
+
+    fn string(self: *Compiler) void {
+        const lexeme = self.parser.previous.lexeme;
+        const value = Obj.String.copy(self.vm, lexeme[1 .. lexeme.len - 1]);
+        self.emitConstant(Value.fromObj(&value.obj));
     }
 
     fn literal(self: *Compiler) void {
@@ -262,7 +271,7 @@ const Compiler = struct {
             TokenType.TOKEN_LESS => comptime ParseRule.init(null, Compiler.binary, Precedence.PREC_COMPARISON),
             TokenType.TOKEN_LESS_EQUAL => comptime ParseRule.init(null, Compiler.binary, Precedence.PREC_COMPARISON),
             TokenType.TOKEN_IDENTIFIER => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
-            TokenType.TOKEN_STRING => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
+            TokenType.TOKEN_STRING => comptime ParseRule.init(Compiler.string, null, Precedence.PREC_NONE),
             TokenType.TOKEN_NUMBER => comptime ParseRule.init(Compiler.number, null, Precedence.PREC_NONE),
             TokenType.TOKEN_AND => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_CLASS => comptime ParseRule.init(null, null, Precedence.PREC_NONE),

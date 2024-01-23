@@ -1,18 +1,25 @@
 const std = @import("std");
+const Obj = @import("./object.zig").Obj;
 
 const ValueType = enum {
     nil,
     boolean,
     number,
+    obj,
 };
 
 pub const Value = union(ValueType) {
     nil,
     boolean: bool,
     number: f64,
+    obj: *Obj,
 
     pub fn fromBool(x: bool) Value {
         return Value{ .boolean = x };
+    }
+
+    pub fn fromObj(x: *Obj) Value {
+        return Value{ .obj = x };
     }
 
     pub fn fromNumber(x: f64) Value {
@@ -31,6 +38,16 @@ pub const Value = union(ValueType) {
         return switch (self) {
             .number => b == .number and self.number == b.number,
             .boolean => b == .boolean and self.boolean == b.boolean,
+            .obj => {
+                if (b == .obj) {
+                    const astr = self.obj.asString().chars;
+                    const bstr = b.obj.asString().chars;
+
+                    return std.mem.eql(u8, astr, bstr);
+                }
+
+                return false;
+            },
             .nil => b == .nil,
         };
     }
@@ -40,6 +57,9 @@ pub const Value = union(ValueType) {
             .number => |val| std.debug.print("{d}", .{val}),
             .nil => |val| std.debug.print("{}", .{val}),
             .boolean => |val| std.debug.print("{}", .{val}),
+            .obj => |val| switch (val.obj_type) {
+                .String => std.debug.print("{s}", .{val.asString().chars}),
+            },
         }
     }
 };

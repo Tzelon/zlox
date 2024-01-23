@@ -1,0 +1,52 @@
+const std = @import("std");
+const Value = @import("./value.zig").Value;
+const VM = @import("./vm.zig").VM;
+const Allocator = std.mem.Allocator;
+
+pub const Obj = struct {
+    obj_type: Type,
+    next: ?*Obj,
+
+    pub const Type = enum { String };
+
+    fn create(vm: *VM, comptime T: type, objtype: Type) *T {
+        const prt_t = vm.allocator.create(T) catch @panic("Error creating object\n");
+
+        prt_t.obj = Obj{ .obj_type = objtype, .next = undefined };
+        // vm.objs = &prt_t.obj;
+
+        return prt_t;
+    }
+
+    pub inline fn isA(value: Value, objectType: Type) bool {
+        return value == .obj and value.obj.obj_type == objectType;
+    }
+
+    pub fn asString(self: *Obj) *String {
+        return @fieldParentPtr(String, "obj", self);
+    }
+
+    pub const String = struct {
+        obj: Obj,
+        len: usize,
+        chars: []const u8,
+
+        pub fn copy(vm: *VM, chars: []const u8) *String {
+            const heap = vm.allocator.alloc(u8, chars.len) catch {
+                @panic("Error copying String\n");
+            };
+            @memcpy(heap, chars);
+
+            return allocate(vm, heap);
+        }
+
+        fn allocate(vm: *VM, chars: []const u8) *String {
+            const str = Obj.create(vm, String, .String);
+            str.chars = chars;
+
+            vm.push(Value.fromObj(&str.obj));
+
+            return str;
+        }
+    };
+};
