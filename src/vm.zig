@@ -3,6 +3,7 @@ const Allocator = std.mem.Allocator;
 const Chunk = @import("./chunk.zig").Chunk;
 const OpCode = @import("./chunk.zig").OpCode;
 const Value = @import("./value.zig").Value;
+const Obj = @import("./object.zig").Obj;
 const compile = @import("./compiler.zig").compile;
 const debug = @import("./debug.zig");
 const debug_trace_execution = debug.debug_trace_execution;
@@ -21,14 +22,16 @@ pub const VM = struct {
     stack: [STACK_MAX]Value = undefined,
     stack_top: usize = 0,
     allocator: Allocator,
+    /// pointer to the head of the objects list
+    objects: ?*Obj,
 
     pub fn init(allocator: Allocator) VM {
-        var vm = VM{ .allocator = allocator, .chunk = undefined, .ip = undefined };
+        var vm = VM{ .objects = null, .allocator = allocator, .chunk = undefined, .ip = undefined };
         return vm;
     }
 
     pub fn deinit(self: *VM) void {
-        _ = self;
+        self.freeObjects();
     }
 
     pub fn interpret(self: *VM, source: []const u8) InterpretError!InterpretResult {
@@ -95,7 +98,11 @@ pub const VM = struct {
                     continue;
                 },
                 OpCode.OP_ADD => {
-                    try self.binaryOp(.ADD);
+                    if (Obj.isA(self.peek(0), .String) and Obj.isA(self.peek(1), .String)) {
+                        self.concatenate();
+                    } else {
+                        try self.binaryOp(.ADD);
+                    }
                     continue;
                 },
                 OpCode.OP_SUBTRACT => {
@@ -143,6 +150,15 @@ pub const VM = struct {
                 },
             }
         };
+    }
+
+    fn concatenate(self: *VM) void {
+        const b = self.pop().obj.asString();
+        const a = self.pop().obj.asString();
+        const heap = std.mem.concat(self.allocator, u8, &[_][]const u8{ a.chars, b.chars }) catch unreachable;
+        const obj = Obj.String.take(self, heap);
+
+        self.push(Value.fromObj(&obj.obj));
     }
 
     fn peek(self: *VM, distance: usize) Value {
@@ -196,5 +212,15 @@ pub const VM = struct {
         var byte = self.chunk.code.items[self.ip];
         self.ip += 1;
         return byte;
+    }
+
+    fn freeObjects(self: *VM) void {
+        var object = self.objects;
+
+        while (object) |o| {
+            const next = o.next;
+            o.destroy(self);
+            object = next;
+        }
     }
 };

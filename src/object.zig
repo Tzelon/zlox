@@ -12,8 +12,8 @@ pub const Obj = struct {
     fn create(vm: *VM, comptime T: type, objtype: Type) *T {
         const prt_t = vm.allocator.create(T) catch @panic("Error creating object\n");
 
-        prt_t.obj = Obj{ .obj_type = objtype, .next = undefined };
-        // vm.objs = &prt_t.obj;
+        prt_t.obj = Obj{ .obj_type = objtype, .next = vm.objects };
+        vm.objects = &prt_t.obj;
 
         return prt_t;
     }
@@ -26,11 +26,20 @@ pub const Obj = struct {
         return @fieldParentPtr(String, "obj", self);
     }
 
+    pub fn destroy(self: *Obj, vm: *VM) void {
+        switch (self.obj_type) {
+            .String => self.asString().destroy(vm),
+        }
+    }
+
     pub const String = struct {
         obj: Obj,
         len: usize,
         chars: []const u8,
 
+        /// assume we cannot take ownership of the characters,
+        /// so, we creates a copy of them on the heap.
+        /// example are literal strings from source.
         pub fn copy(vm: *VM, chars: []const u8) *String {
             const heap = vm.allocator.alloc(u8, chars.len) catch {
                 @panic("Error copying String\n");
@@ -40,6 +49,12 @@ pub const Obj = struct {
             return allocate(vm, heap);
         }
 
+        /// assume we can take ownership of the characters.
+        /// examples are concatenate strings
+        pub fn take(vm: *VM, chars: []const u8) *String {
+            return allocate(vm, chars);
+        }
+
         fn allocate(vm: *VM, chars: []const u8) *String {
             const str = Obj.create(vm, String, .String);
             str.chars = chars;
@@ -47,6 +62,12 @@ pub const Obj = struct {
             vm.push(Value.fromObj(&str.obj));
 
             return str;
+        }
+
+        fn destroy(self: *String, vm: *VM) void {
+            std.debug.print("free memory of {s}\n", .{self.chars});
+            vm.allocator.free(self.chars);
+            vm.allocator.destroy(self);
         }
     };
 };
