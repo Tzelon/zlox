@@ -4,6 +4,7 @@ const Chunk = @import("./chunk.zig").Chunk;
 const OpCode = @import("./chunk.zig").OpCode;
 const Value = @import("./value.zig").Value;
 const Obj = @import("./object.zig").Obj;
+const Table = @import("./table.zig").Table;
 const compile = @import("./compiler.zig").compile;
 const debug = @import("./debug.zig");
 const debug_trace_execution = debug.debug_trace_execution;
@@ -22,15 +23,16 @@ pub const VM = struct {
     stack: [STACK_MAX]Value = undefined,
     stack_top: usize = 0,
     allocator: Allocator,
+    strings: Table,
     /// pointer to the head of the objects list
     objects: ?*Obj,
 
     pub fn init(allocator: Allocator) VM {
-        var vm = VM{ .objects = null, .allocator = allocator, .chunk = undefined, .ip = undefined };
-        return vm;
+        return VM{ .strings = Table.init(allocator), .objects = null, .allocator = allocator, .chunk = undefined, .ip = undefined };
     }
 
     pub fn deinit(self: *VM) void {
+        self.strings.deinit();
         self.freeObjects();
     }
 

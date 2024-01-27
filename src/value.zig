@@ -40,10 +40,7 @@ pub const Value = union(ValueType) {
             .boolean => b == .boolean and self.boolean == b.boolean,
             .obj => {
                 if (b == .obj) {
-                    const astr = self.obj.asString().chars;
-                    const bstr = b.obj.asString().chars;
-
-                    return std.mem.eql(u8, astr, bstr);
+                    return self.obj == b.obj;
                 }
 
                 return false;

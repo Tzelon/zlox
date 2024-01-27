@@ -36,38 +36,62 @@ pub const Obj = struct {
         obj: Obj,
         len: usize,
         chars: []const u8,
+        hash: u32,
 
         /// assume we cannot take ownership of the characters,
         /// so, we creates a copy of them on the heap.
         /// example are literal strings from source.
         pub fn copy(vm: *VM, chars: []const u8) *String {
+            const hash = hashString(chars);
+
+            if (vm.strings.findString(chars, hash)) |interned| return interned;
+
             const heap = vm.allocator.alloc(u8, chars.len) catch {
                 @panic("Error copying String\n");
             };
             @memcpy(heap, chars);
 
-            return allocate(vm, heap);
+            return allocate(vm, heap, hash);
         }
 
         /// assume we can take ownership of the characters.
         /// examples are concatenate strings
         pub fn take(vm: *VM, chars: []const u8) *String {
-            return allocate(vm, chars);
+            const hash = hashString(chars);
+            if (vm.strings.findString(chars, hash)) |interned| {
+                vm.allocator.free(chars);
+                return interned;
+            }
+            return allocate(vm, chars, hash);
         }
 
-        fn allocate(vm: *VM, chars: []const u8) *String {
+        fn allocate(vm: *VM, chars: []const u8, hash: u32) *String {
             const str = Obj.create(vm, String, .String);
             str.chars = chars;
+            str.hash = hash;
+
+            _ = vm.strings.set(str, Value.fromNil());
 
             vm.push(Value.fromObj(&str.obj));
 
             return str;
         }
 
-        fn destroy(self: *String, vm: *VM) void {
+        pub fn destroy(self: *String, vm: *VM) void {
             std.debug.print("free memory of {s}\n", .{self.chars});
             vm.allocator.free(self.chars);
             vm.allocator.destroy(self);
+        }
+
+        fn hashString(chars: []const u8) u32 {
+            var hash: u32 = 2166136261;
+
+            for (chars) |char| {
+                hash ^= char;
+                hash *%= 16777610;
+            }
+
+            return hash;
         }
     };
 };
