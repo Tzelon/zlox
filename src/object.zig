@@ -78,7 +78,6 @@ pub const Obj = struct {
         }
 
         pub fn destroy(self: *String, vm: *VM) void {
-            std.debug.print("free memory of {s}\n", .{self.chars});
             vm.allocator.free(self.chars);
             vm.allocator.destroy(self);
         }

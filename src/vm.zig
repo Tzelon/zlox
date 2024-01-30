@@ -26,13 +26,15 @@ pub const VM = struct {
     strings: Table,
     /// pointer to the head of the objects list
     objects: ?*Obj,
+    globals: Table,
 
     pub fn init(allocator: Allocator) VM {
-        return VM{ .strings = Table.init(allocator), .objects = null, .allocator = allocator, .chunk = undefined, .ip = undefined };
+        return VM{ .globals = Table.init(allocator), .strings = Table.init(allocator), .objects = null, .allocator = allocator, .chunk = undefined, .ip = undefined };
     }
 
     pub fn deinit(self: *VM) void {
         self.strings.deinit();
+        self.globals.deinit();
         self.freeObjects();
     }
 
@@ -78,9 +80,6 @@ pub const VM = struct {
             var instruction = OpCode.fromU8(self.readByte());
             switch (instruction) {
                 OpCode.OP_RETURN => {
-                    // try PrintValue(self.pop());
-                    try self.pop().printValue();
-                    std.debug.print("\n", .{});
                     break InterpretResult.INTERPRET_OK;
                 },
                 OpCode.OP_NEGATE => {
@@ -120,7 +119,7 @@ pub const VM = struct {
                     continue;
                 },
                 OpCode.OP_CONSTANT => {
-                    var constant: Value = self.chunk.constants.items[self.readByte()];
+                    var constant = self.readConstant();
                     self.push(constant);
                     continue;
                 },
@@ -136,6 +135,42 @@ pub const VM = struct {
                     self.push(Value.fromBool(false));
                     continue;
                 },
+                OpCode.OP_POP => {
+                    _ = self.pop();
+                    continue;
+                },
+                OpCode.OP_GET_GLOBAL => {
+                    const name = self.readString();
+                    var val = Value.fromNil();
+                    if (!self.globals.get(name, &val)) {
+                        self.runtimeError("Undefined variable {s}", .{name.chars});
+                    }
+
+                    self.push(val);
+
+                    continue;
+                },
+                OpCode.OP_SET_GLOBAL => {
+                    const name = self.readString();
+                    // we are not allow to assign for a new variable
+                    if (self.globals.set(name, self.peek(0))) {
+                        _ = self.globals.delete(name);
+                        self.runtimeError("Undefined variable '{s}'.", .{name.chars});
+
+                        return InterpretError.RUNTIME_ERROR;
+                    }
+                    continue;
+                },
+                OpCode.OP_DEFINE_GLOBAL => {
+                    const name = self.readString();
+                    _ = self.globals.set(name, self.peek(0));
+
+                    //Note that we don’t pop the value until after we add it to the hash table.
+                    //That ensures the VM can still find the value if a garbage collection is triggered right in the middle of adding it to the hash table.
+                    //That’s a distinct possibility since the hash table requires dynamic allocation when it resizes.
+                    _ = self.pop();
+                    continue;
+                },
                 OpCode.OP_EQUAL => {
                     const b = self.pop();
                     const a = self.pop();
@@ -146,8 +181,13 @@ pub const VM = struct {
                     self.push(Value.fromBool(isFalsey(self.pop())));
                     continue;
                 },
+                OpCode.OP_PRINT => {
+                    try self.pop().printValue();
+                    std.debug.print("\n", .{});
+                    continue;
+                },
                 else => {
-                    std.debug.print("uknown instruction", .{});
+                    std.debug.print("uknown instruction {} \n", .{instruction});
                     return InterpretError.COMPILE_ERROR;
                 },
             }
@@ -214,6 +254,14 @@ pub const VM = struct {
         var byte = self.chunk.code.items[self.ip];
         self.ip += 1;
         return byte;
+    }
+
+    inline fn readConstant(self: *VM) Value {
+        return self.chunk.constants.items[self.readByte()];
+    }
+
+    inline fn readString(self: *VM) *Obj.String {
+        return self.readConstant().obj.asString();
     }
 
     fn freeObjects(self: *VM) void {

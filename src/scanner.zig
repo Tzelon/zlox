@@ -60,7 +60,7 @@ pub const Scanner = struct {
         return Scanner{ .start = source, .current = 0, .line = 1 };
     }
 
-    pub fn scanToken(self: *Scanner) Token {
+    pub fn scanToken(self: *Scanner) ?Token {
         self.skipWhiteSpace();
         self.start = self.start[self.current..];
         self.current = 0;

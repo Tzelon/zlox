@@ -32,6 +32,7 @@ pub const Table = struct {
         return true;
     }
 
+    /// return true if this a new key
     pub fn set(self: *Table, key: *String, value: Value) bool {
         //check for 75% capacity
         if (4 * (self.count + 1) > self.entries.len * 3) {
@@ -71,7 +72,7 @@ pub const Table = struct {
         }
     }
 
-    fn delete(self: *Table, key: *String) bool {
+    pub fn delete(self: *Table, key: *String) bool {
         if (self.count == 0) return false;
 
         const entry = findEntry(self.entries, key);

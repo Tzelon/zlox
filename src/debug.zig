@@ -39,9 +39,14 @@ pub fn disassembleInstruction(chunk: *Chunk, offset: usize) usize {
         OpCode.OP_TRUE => simpleInstruction("OP_TRUE", offset),
         OpCode.OP_FALSE => simpleInstruction("OP_FALSE", offset),
         OpCode.OP_NOT => simpleInstruction("OP_NOT", offset),
+        OpCode.OP_POP => simpleInstruction("OP_POP", offset),
+        OpCode.OP_GET_GLOBAL => constantInstruction("OP_GET_GLOBAL", chunk, offset),
+        OpCode.OP_SET_GLOBAL => constantInstruction("OP_SET_GLOBAL", chunk, offset),
+        OpCode.OP_DEFINE_GLOBAL => constantInstruction("OP_DEFINE_GLOBAL", chunk, offset),
         OpCode.OP_EQUAL => simpleInstruction("OP_EQUAL", offset),
         OpCode.OP_GREATER => simpleInstruction("OP_GREATER", offset),
         OpCode.OP_LESS => simpleInstruction("OP_LESS", offset),
+        OpCode.OP_PRINT => simpleInstruction("OP_PRINT", offset),
         else => {
             std.debug.print("Unkown opcode {any}\n", .{instruction});
             return offset + 1;
