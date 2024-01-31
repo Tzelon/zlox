@@ -8,6 +8,8 @@ pub const debug_print_code = true;
 
 pub fn disassembleChunk(chunk: *Chunk, name: []const u8) void {
     std.debug.print("=== {s} ===\n", .{name});
+    std.debug.print("offset  line  instruction        index value\n", .{});
+    std.debug.print("---------------------------------------------\n", .{});
     var offset: usize = 0;
 
     while (offset < chunk.code.items.len) {
@@ -21,9 +23,9 @@ pub fn disassembleInstruction(chunk: *Chunk, offset: usize) usize {
     std.debug.print("{d:0>4} ", .{offset});
 
     if (offset > 0 and chunk.lines.items[offset] == chunk.lines.items[offset - 1]) {
-        std.debug.print("  | ", .{});
+        std.debug.print("    |    ", .{});
     } else {
-        std.debug.print("  {d} ", .{chunk.lines.items[offset]});
+        std.debug.print("    {d}    ", .{chunk.lines.items[offset]});
     }
 
     const instruction = OpCode.fromU8(chunk.code.items[offset]);
@@ -40,6 +42,8 @@ pub fn disassembleInstruction(chunk: *Chunk, offset: usize) usize {
         OpCode.OP_FALSE => simpleInstruction("OP_FALSE", offset),
         OpCode.OP_NOT => simpleInstruction("OP_NOT", offset),
         OpCode.OP_POP => simpleInstruction("OP_POP", offset),
+        OpCode.OP_GET_LOCAL => byteInstruction("OP_GET_LOCAL", chunk, offset),
+        OpCode.OP_SET_LOCAL => byteInstruction("OP_SET_LOCAL", chunk, offset),
         OpCode.OP_GET_GLOBAL => constantInstruction("OP_GET_GLOBAL", chunk, offset),
         OpCode.OP_SET_GLOBAL => constantInstruction("OP_SET_GLOBAL", chunk, offset),
         OpCode.OP_DEFINE_GLOBAL => constantInstruction("OP_DEFINE_GLOBAL", chunk, offset),
@@ -61,10 +65,16 @@ pub fn simpleInstruction(name: []const u8, offset: usize) usize {
 
 pub fn constantInstruction(name: []const u8, chunk: *Chunk, offset: usize) usize {
     var constant = chunk.code.items[offset + 1];
-    std.debug.print("{s} {d: >4} '", .{ name, constant });
-    // try printValue(chunk.constants.items[constant]);
+    std.debug.print("{s: <20} {d}   '", .{ name, constant });
     try chunk.constants.items[constant].printValue();
     std.debug.print("'\n", .{});
+
+    return offset + 2;
+}
+
+pub fn byteInstruction(name: []const u8, chunk: *Chunk, offset: usize) usize {
+    var slot = chunk.code.items[offset + 1];
+    std.debug.print("{s: <20} {d}\n", .{ name, slot });
 
     return offset + 2;
 }

@@ -72,8 +72,6 @@ pub const Obj = struct {
 
             _ = vm.strings.set(str, Value.fromNil());
 
-            vm.push(Value.fromObj(&str.obj));
-
             return str;
         }
 

@@ -139,6 +139,16 @@ pub const VM = struct {
                     _ = self.pop();
                     continue;
                 },
+                OpCode.OP_GET_LOCAL => {
+                    const slot = self.readByte();
+                    self.push(self.stack[slot]);
+                    continue;
+                },
+                OpCode.OP_SET_LOCAL => {
+                    const slot = self.readByte();
+                    self.stack[slot] = self.peek(0);
+                    continue;
+                },
                 OpCode.OP_GET_GLOBAL => {
                     const name = self.readString();
                     var val = Value.fromNil();
