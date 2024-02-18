@@ -82,6 +82,18 @@ pub const VM = struct {
                 OpCode.OP_RETURN => {
                     break InterpretResult.INTERPRET_OK;
                 },
+                OpCode.OP_JUMP_IF_FALSE => {
+                    const offset = self.readShort();
+                    if (isFalsey(self.peek(0))) {
+                        self.ip += offset;
+                        continue;
+                    }
+                },
+                OpCode.OP_JUMP => {
+                    const offset = self.readShort();
+                    self.ip += offset;
+                    continue;
+                },
                 OpCode.OP_NEGATE => {
                     if (!self.peek(0).isA(.number)) {
                         self.runtimeError("Operand must be a number.", .{});
@@ -268,6 +280,13 @@ pub const VM = struct {
 
     inline fn readConstant(self: *VM) Value {
         return self.chunk.constants.items[self.readByte()];
+    }
+
+    /// reads two 16bits operand
+    inline fn readShort(self: *VM) u16 {
+        self.ip += 2;
+        const items = self.chunk.code.items;
+        return (@as(u16, items[self.ip - 2]) << 8) | items[self.ip - 1];
     }
 
     inline fn readString(self: *VM) *Obj.String {

@@ -1,6 +1,6 @@
-var z = 10;
-{
-	var y = 2;
-	z = 20;
-	print y + z;
+if(false) {
+	print "hello";
+} else {
+	print "hey";
 }
+

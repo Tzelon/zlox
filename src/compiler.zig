@@ -189,6 +189,14 @@ const Compiler = struct {
         };
     }
 
+    pub fn emitJump(self: *Compiler, instruction: OpCode) usize {
+        self.emitOp(instruction);
+        // dummy operands that will be patched later.
+        self.emitByte(0xff);
+        self.emitByte(0xff);
+        return self.currentChunk().code.items.len - 2;
+    }
+
     fn emitUnaryOp(self: *Compiler, opcode: OpCode, byte: u8) void {
         self.emitOp(opcode);
         self.emitByte(byte);
@@ -196,6 +204,18 @@ const Compiler = struct {
 
     fn emitConstant(self: *Compiler, value: Value) void {
         self.emitUnaryOp(OpCode.OP_CONSTANT, self.makeConstant(value));
+    }
+
+    fn patchJump(self: *Compiler, offset: usize) void {
+        // -2 to adjust for the bytecode for the jump offset itself.
+        const jump = self.currentChunk().code.items.len - offset - 2;
+
+        if (jump > std.math.maxInt(u16)) {
+            self.parser.err("Too much code to jump over.");
+        }
+
+        self.currentChunk().code.items[offset] = @intCast((jump >> 8) & 0xff);
+        self.currentChunk().code.items[offset + 1] = @intCast(jump & 0xff);
     }
 
     fn emitReturn(self: *Compiler) void {
@@ -234,6 +254,8 @@ const Compiler = struct {
     fn statement(self: *Compiler) void {
         if (self.parser.match(TokenType.TOKEN_PRINT)) {
             self.printStatement();
+        } else if (self.parser.match(TokenType.TOKEN_IF)) {
+            self.ifStatement();
         } else if (self.parser.match(TokenType.TOKEN_LEFT_BRACE)) {
             self.beginScope();
             self.block();
@@ -268,6 +290,27 @@ const Compiler = struct {
         self.expression();
         self.parser.consume(TokenType.TOKEN_SEMICOLON, "Expect ';' after value.");
         self.emitOp(OpCode.OP_POP);
+    }
+
+    fn ifStatement(self: *Compiler) void {
+        self.parser.consume(TokenType.TOKEN_LEFT_PAREN, "Expect '(' after 'if'.");
+        self.expression();
+        self.parser.consume(TokenType.TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
+
+        const thenJump = self.emitJump(OpCode.OP_JUMP_IF_FALSE);
+        self.emitOp(OpCode.OP_POP);
+        self.statement();
+
+        const elseJump = self.emitJump(OpCode.OP_JUMP);
+
+        self.patchJump(thenJump);
+        self.emitOp(OpCode.OP_POP);
+
+        if (self.parser.match(TokenType.TOKEN_ELSE)) {
+            self.statement();
+        }
+
+        self.patchJump(elseJump);
     }
 
     fn printStatement(self: *Compiler) void {

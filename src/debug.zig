@@ -4,7 +4,7 @@ const OpCode = @import("./chunk.zig").OpCode;
 const printValue = @import("./Value.zig").printValue;
 
 pub const debug_trace_execution = false;
-pub const debug_print_code = true;
+pub const debug_print_code = false;
 
 pub fn disassembleChunk(chunk: *Chunk, name: []const u8) void {
     std.debug.print("=== {s} ===\n", .{name});
@@ -20,7 +20,7 @@ pub fn disassembleChunk(chunk: *Chunk, name: []const u8) void {
 }
 
 pub fn disassembleInstruction(chunk: *Chunk, offset: usize) usize {
-    std.debug.print("{d:0>4} ", .{offset});
+    std.debug.print("+++ {d:0>4} ", .{offset});
 
     if (offset > 0 and chunk.lines.items[offset] == chunk.lines.items[offset - 1]) {
         std.debug.print("    |    ", .{});
@@ -36,6 +36,8 @@ pub fn disassembleInstruction(chunk: *Chunk, offset: usize) usize {
         OpCode.OP_SUBTRACT => simpleInstruction("OP_SUBSTACT", offset),
         OpCode.OP_MULTIPLY => simpleInstruction("OP_MULTIPLY", offset),
         OpCode.OP_DIVIDE => simpleInstruction("OP_DIVIDE", offset),
+        OpCode.OP_JUMP => jumpInstruction("OP_JUMP", 1, chunk, offset),
+        OpCode.OP_JUMP_IF_FALSE => jumpInstruction("OP_JUMP_IF_FALSE", 1, chunk, offset),
         OpCode.OP_RETURN => simpleInstruction("OP_RETURN", offset),
         OpCode.OP_NIL => simpleInstruction("OP_NIL", offset),
         OpCode.OP_TRUE => simpleInstruction("OP_TRUE", offset),
@@ -61,6 +63,14 @@ pub fn disassembleInstruction(chunk: *Chunk, offset: usize) usize {
 pub fn simpleInstruction(name: []const u8, offset: usize) usize {
     std.debug.print("{s}\n", .{name});
     return offset + 1;
+}
+
+pub fn jumpInstruction(name: []const u8, sign: u16, chunk: *Chunk, offset: usize) usize {
+    var jump = @as(u16, chunk.code.items[offset + 1]) << 8;
+    jump |= chunk.code.items[offset + 2];
+    std.debug.print("{s: <20}     {d} -> {d}\n", .{ name, offset, offset + 3 + sign * jump });
+
+    return offset + 3;
 }
 
 pub fn constantInstruction(name: []const u8, chunk: *Chunk, offset: usize) usize {
