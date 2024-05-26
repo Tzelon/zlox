@@ -189,6 +189,18 @@ const Compiler = struct {
         };
     }
 
+    pub fn emitLoop(self: *Compiler, loopStart: usize) void {
+        self.emitOp(OpCode.OP_LOOP);
+
+        const offset = self.currentChunk().code.items.len - loopStart + 2;
+        if (offset > std.math.maxInt(u16)) {
+            self.parser.err("Loop body too large.");
+        }
+
+        self.emitByte(@intCast((offset >> 8) & 0xff));
+        self.emitByte(@intCast(offset & 0xff));
+    }
+
     pub fn emitJump(self: *Compiler, instruction: OpCode) usize {
         self.emitOp(instruction);
         // dummy operands that will be patched later.
@@ -256,6 +268,10 @@ const Compiler = struct {
             self.printStatement();
         } else if (self.parser.match(TokenType.TOKEN_IF)) {
             self.ifStatement();
+        } else if (self.parser.match(TokenType.TOKEN_WHILE)) {
+            self.whileStatement();
+        } else if (self.parser.match(TokenType.TOKEN_FOR)) {
+            self.forStatement();
         } else if (self.parser.match(TokenType.TOKEN_LEFT_BRACE)) {
             self.beginScope();
             self.block();
@@ -313,6 +329,73 @@ const Compiler = struct {
         self.patchJump(elseJump);
     }
 
+    fn forStatement(self: *Compiler) void {
+        self.beginScope();
+        self.parser.consume(TokenType.TOKEN_LEFT_PAREN, "Expect '(' after 'for'.");
+        //initializer
+        if (self.parser.match(TokenType.TOKEN_SEMICOLON)) {
+            // no initializer
+        } else if (self.parser.match(TokenType.TOKEN_VAR)) {
+            self.varDeclaration();
+        } else {
+            self.expressionStatement();
+        }
+
+        const loopStart = self.currentChunk().code.items.len;
+        var exitJump: usize = undefined;
+
+        // condition
+        if (!self.parser.match(TokenType.TOKEN_SEMICOLON)) {
+            self.expression();
+            self.parser.consume(TokenType.TOKEN_SEMICOLON, "Expect ';' after loop condition.");
+
+            // jump out of the loop if the condition is false.
+            exitJump = self.emitJump(OpCode.OP_JUMP_IF_FALSE);
+            self.emitOp(OpCode.OP_POP);
+        }
+
+        // increment
+        if (!self.parser.match(TokenType.TOKEN_RIGHT_PAREN)) {
+            const bodyJump = self.emitJump(OpCode.OP_JUMP);
+            const incrementStart = self.currentChunk().code.items.len;
+            self.expression();
+            self.emitOp(OpCode.OP_POP);
+
+            self.parser.consume(TokenType.TOKEN_RIGHT_PAREN, "Expect ')' after for clauses.");
+
+            self.emitLoop(loopStart);
+            loopStart = incrementStart;
+            self.patchJump(bodyJump);
+        }
+
+        self.statement();
+        self.emitLoop(loopStart);
+
+        // check that we have conditional clause
+        if (exitJump != undefined) {
+            self.patchJump(exitJump);
+            self.emitOp(OpCode.OP_POP);
+        }
+
+        self.endScope();
+    }
+
+    fn whileStatement(self: *Compiler) void {
+        const loopStart = self.currentChunk().code.items.len;
+        self.parser.consume(TokenType.TOKEN_LEFT_PAREN, "Expect '(' after 'while'.");
+        self.expression();
+        self.parser.consume(TokenType.TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
+
+        const exitJump = self.emitJump(OpCode.OP_JUMP_IF_FALSE);
+
+        self.emitOp(OpCode.OP_POP);
+        self.statement();
+        self.emitLoop(loopStart);
+
+        self.patchJump(exitJump);
+        self.emitOp(OpCode.OP_POP);
+    }
+
     fn printStatement(self: *Compiler) void {
         self.expression();
         self.parser.consume(TokenType.TOKEN_SEMICOLON, "Expect ';' after value.");
@@ -339,6 +422,26 @@ const Compiler = struct {
                 std.debug.print("cound not parse number", .{});
             },
         }
+    }
+
+    fn @"or"(self: *Compiler, _: bool) void {
+        const elseJump = self.emitJump(OpCode.OP_JUMP_IF_FALSE);
+        const endJump = self.emitJump(OpCode.OP_JUMP);
+
+        self.patchJump(elseJump);
+        self.emitOp(OpCode.OP_POP);
+
+        self.parsePrecedence(Precedence.PREC_OR);
+        self.patchJump(endJump);
+    }
+
+    fn @"and"(self: *Compiler, _: bool) void {
+        const endJump = self.emitJump(OpCode.OP_JUMP_IF_FALSE);
+
+        self.emitOp(OpCode.OP_POP);
+        self.parsePrecedence(Precedence.PREC_AND);
+
+        self.patchJump(endJump);
     }
 
     fn string(self: *Compiler, _: bool) void {
@@ -437,7 +540,7 @@ const Compiler = struct {
             TokenType.TOKEN_IDENTIFIER => comptime ParseRule.init(Compiler.variable, null, Precedence.PREC_NONE),
             TokenType.TOKEN_STRING => comptime ParseRule.init(Compiler.string, null, Precedence.PREC_NONE),
             TokenType.TOKEN_NUMBER => comptime ParseRule.init(Compiler.number, null, Precedence.PREC_NONE),
-            TokenType.TOKEN_AND => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
+            TokenType.TOKEN_AND => comptime ParseRule.init(null, Compiler.@"and", Precedence.PREC_AND),
             TokenType.TOKEN_CLASS => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_ELSE => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_FALSE => comptime ParseRule.init(Compiler.literal, null, Precedence.PREC_NONE),
@@ -445,7 +548,7 @@ const Compiler = struct {
             TokenType.TOKEN_FUN => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_IF => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_NIL => comptime ParseRule.init(Compiler.literal, null, Precedence.PREC_NONE),
-            TokenType.TOKEN_OR => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
+            TokenType.TOKEN_OR => comptime ParseRule.init(null, Compiler.@"or", Precedence.PREC_OR),
             TokenType.TOKEN_PRINT => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_RETURN => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_SUPER => comptime ParseRule.init(null, null, Precedence.PREC_NONE),

@@ -82,6 +82,11 @@ pub const VM = struct {
                 OpCode.OP_RETURN => {
                     break InterpretResult.INTERPRET_OK;
                 },
+                OpCode.OP_LOOP => {
+                    const offset = self.readShort();
+                    self.ip -= offset;
+                    continue;
+                },
                 OpCode.OP_JUMP_IF_FALSE => {
                     const offset = self.readShort();
                     if (isFalsey(self.peek(0))) {
