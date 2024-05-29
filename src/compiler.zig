@@ -341,7 +341,7 @@ const Compiler = struct {
             self.expressionStatement();
         }
 
-        const loopStart = self.currentChunk().code.items.len;
+        var loopStart = self.currentChunk().code.items.len;
         var exitJump: usize = undefined;
 
         // condition
