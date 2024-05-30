@@ -129,6 +129,7 @@ const Locals = struct {
     }
 
     pub fn markInitialized(self: *Locals) void {
+        if (self.scope_depth == 0) return;
         self.locals[self.local_count - 1].depth = self.scope_depth;
     }
 };
@@ -267,7 +268,9 @@ const Compiler = struct {
     }
 
     fn declaration(self: *Compiler) void {
-        if (self.parser.match(TokenType.TOKEN_VAR)) {
+        if (self.parser.match(TokenType.TOKEN_FUN)) {
+            self.funDeclaration();
+        } else if (self.parser.match(TokenType.TOKEN_VAR)) {
             self.varDeclaration();
         } else {
             self.statement();
@@ -302,6 +305,12 @@ const Compiler = struct {
         self.parser.consume(TokenType.TOKEN_RIGHT_BRACE, "Expect '}' after block.");
     }
 
+    fn funDeclaration(self: *Compiler) void {
+        const global = self.parseVariable("Expect function name");
+        self.locals.markInitialized();
+        function(.TYPE_FUNCTION);
+        self.defineVariable(global);
+    }
     fn varDeclaration(self: *Compiler) void {
         const global = self.parseVariable("Expect variable name");
 
@@ -425,6 +434,20 @@ const Compiler = struct {
                 else => self.parser.advance(),
             }
         }
+    }
+
+    fn function(self: *Compiler, ftype: FunctionType) void {
+        const compiler = Compiler.init(self.vm, self.parser, self.locals, ftype);
+        compiler.beginScope();
+
+        compiler.parser.consume(TokenType.TOKEN_LEFT_PAREN, "Expect '(' after function name.");
+        compiler.parser.consume(TokenType.TOKEN_RIGHT_PAREN, "Expect ')' after parameters.");
+        compiler.parser.consume(TokenType.TOKEN_LEFT_BRACE, "Expect '{' before function body.");
+        compiler.block();
+
+        const func = compiler.deinit();
+
+        self.emitConstant(self.makeConstant(Value.fromObj(func.obj)));
     }
 
     fn number(self: *Compiler, _: bool) void {
