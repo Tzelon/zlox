@@ -54,7 +54,7 @@ pub const Obj = struct {
         }
 
         pub fn destroy(self: *Function, vm: *VM) void {
-            vm.allocator.free(self.chunk);
+            self.chunk.deinit();
             vm.allocator.destroy(self);
         }
     };
