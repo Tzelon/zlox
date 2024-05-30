@@ -56,6 +56,10 @@ pub const Value = union(ValueType) {
             .boolean => |val| std.debug.print("{}", .{val}),
             .obj => |val| switch (val.obj_type) {
                 .String => std.debug.print("{s}", .{val.asString().chars}),
+                .Function => {
+                    const name = if (val.asFunction().name) |name| name.chars else "script";
+                    std.debug.print("<fn {s}>", .{name});
+                },
             },
         }
     }

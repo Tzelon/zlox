@@ -1,5 +1,6 @@
 const std = @import("std");
 const Value = @import("./value.zig").Value;
+const Chunk = @import("./chunk.zig").Chunk;
 const VM = @import("./vm.zig").VM;
 const Allocator = std.mem.Allocator;
 
@@ -7,7 +8,7 @@ pub const Obj = struct {
     obj_type: Type,
     next: ?*Obj,
 
-    pub const Type = enum { String };
+    pub const Type = enum { String, Function };
 
     fn create(vm: *VM, comptime T: type, objtype: Type) *T {
         const prt_t = vm.allocator.create(T) catch @panic("Error creating object\n");
@@ -26,11 +27,37 @@ pub const Obj = struct {
         return @fieldParentPtr(String, "obj", self);
     }
 
+    pub fn asFunction(self: *Obj) *Function {
+        return @fieldParentPtr(Function, "obj", self);
+    }
+
     pub fn destroy(self: *Obj, vm: *VM) void {
         switch (self.obj_type) {
             .String => self.asString().destroy(vm),
+            .Function => self.asFunction().destroy(vm),
         }
     }
+
+    pub const Function = struct {
+        obj: Obj,
+        arity: u8,
+        chunk: Chunk,
+        name: ?*Obj.String,
+
+        pub fn create(vm: *VM) *Function {
+            const func = Obj.create(vm, Function, .Function);
+            func.arity = 0;
+            func.chunk = Chunk.init(vm.allocator);
+            func.name = null;
+
+            return func;
+        }
+
+        pub fn destroy(self: *Function, vm: *VM) void {
+            vm.allocator.free(self.chunk);
+            vm.allocator.destroy(self);
+        }
+    };
 
     pub const String = struct {
         obj: Obj,

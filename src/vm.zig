@@ -14,12 +14,20 @@ pub const InterpretError = error{ COMPILE_ERROR, RUNTIME_ERROR };
 const InterpretResult = enum {
     INTERPRET_OK,
 };
-const STACK_MAX = 256;
+const FRAMES_MAX = 64;
+const STACK_MAX = FRAMES_MAX * std.math.maxInt(u8);
 
-pub const VM = struct {
-    chunk: *Chunk,
+const CallFrame = struct {
+    function: *Obj.Function,
     // instruction pointer - points to the instruction about to be execute
     ip: usize,
+    // points into the VM’s value stack at the first slot that this function can use
+    slot: usize,
+};
+
+pub const VM = struct {
+    frames: [FRAMES_MAX]CallFrame = undefined,
+    frame_count: u32 = 0,
     stack: [STACK_MAX]Value = undefined,
     stack_top: usize = 0,
     allocator: Allocator,
@@ -29,7 +37,7 @@ pub const VM = struct {
     globals: Table,
 
     pub fn init(allocator: Allocator) VM {
-        return VM{ .globals = Table.init(allocator), .strings = Table.init(allocator), .objects = null, .allocator = allocator, .chunk = undefined, .ip = undefined };
+        return VM{ .globals = Table.init(allocator), .strings = Table.init(allocator), .objects = null, .allocator = allocator };
     }
 
     pub fn deinit(self: *VM) void {
@@ -39,15 +47,18 @@ pub const VM = struct {
     }
 
     pub fn interpret(self: *VM, source: []const u8) InterpretError!InterpretResult {
-        var chunk = Chunk.init(self.allocator);
-        defer chunk.deinit();
+        const function = compile(
+            self,
+            source,
+        ) catch return InterpretError.COMPILE_ERROR;
 
-        if (!compile(self, source, &chunk)) {
-            return InterpretError.COMPILE_ERROR;
-        }
+        self.push(Value.fromObj(&function.obj));
+        const frame = &self.frames[self.frame_count];
+        self.frame_count += 1;
 
-        self.chunk = &chunk;
-        self.ip = 0;
+        frame.function = function;
+        frame.slot = self.stack_top - 1;
+        frame.ip = 0;
 
         var result = try self.run();
 
@@ -65,6 +76,8 @@ pub const VM = struct {
     }
 
     fn run(self: *VM) InterpretError!InterpretResult {
+        const frame = self.currentFrame();
+
         return while (true) {
             if (comptime debug_trace_execution) {
                 std.debug.print("   STACK: ", .{});
@@ -75,7 +88,7 @@ pub const VM = struct {
                 }
 
                 std.debug.print("\n", .{});
-                _ = debug.disassembleInstruction(self.chunk, self.ip);
+                _ = debug.disassembleInstruction(frame.function.chunk, frame.ip - frame.function.chunk.code);
             }
             var instruction = OpCode.fromU8(self.readByte());
             switch (instruction) {
@@ -84,19 +97,19 @@ pub const VM = struct {
                 },
                 OpCode.OP_LOOP => {
                     const offset = self.readShort();
-                    self.ip -= offset;
+                    frame.ip -= offset;
                     continue;
                 },
                 OpCode.OP_JUMP_IF_FALSE => {
                     const offset = self.readShort();
                     if (isFalsey(self.peek(0))) {
-                        self.ip += offset;
+                        frame.ip += offset;
                         continue;
                     }
                 },
                 OpCode.OP_JUMP => {
                     const offset = self.readShort();
-                    self.ip += offset;
+                    frame.ip += offset;
                     continue;
                 },
                 OpCode.OP_NEGATE => {
@@ -158,12 +171,14 @@ pub const VM = struct {
                 },
                 OpCode.OP_GET_LOCAL => {
                     const slot = self.readByte();
-                    self.push(self.stack[slot]);
+                    // we need to offset the stack pointer by the current frame pointer
+                    self.push(self.stack[self.currentFrame().slot + slot]);
                     continue;
                 },
                 OpCode.OP_SET_LOCAL => {
                     const slot = self.readByte();
-                    self.stack[slot] = self.peek(0);
+                    // we need to offset the stack pointer by the current frame pointer
+                    self.stack[self.currentFrame().slot + slot] = self.peek(0);
                     continue;
                 },
                 OpCode.OP_GET_GLOBAL => {
@@ -243,12 +258,14 @@ pub const VM = struct {
     }
 
     fn runtimeError(self: *VM, comptime message: []const u8, args: anytype) void {
+        const frame = self.currentFrame();
+
         const err_writer = std.io.getStdErr().writer();
 
         err_writer.print(message ++ ".\n", args) catch {};
 
-        const instruction = self.ip - 1;
-        const line = self.chunk.lines.items[instruction];
+        const instruction = frame.ip - 1;
+        const line = frame.function.chunk.lines.items[instruction];
         err_writer.print("[line {d}] in script\n", .{line}) catch {};
 
         self.resetStack();
@@ -256,6 +273,7 @@ pub const VM = struct {
 
     fn resetStack(self: *VM) void {
         self.stack_top = 0;
+        self.frame_count = 0;
     }
 
     inline fn binaryOp(self: *VM, comptime op: BinaryOp) InterpretError!void {
@@ -277,21 +295,27 @@ pub const VM = struct {
         }
     }
 
+    fn currentFrame(self: *VM) *CallFrame {
+        return &self.frames[self.frame_count - 1];
+    }
+
     fn readByte(self: *VM) u8 {
-        var byte = self.chunk.code.items[self.ip];
-        self.ip += 1;
+        const frame = self.currentFrame();
+        var byte = frame.function.chunk.code.items[frame.ip];
+        frame.ip += 1;
         return byte;
     }
 
     inline fn readConstant(self: *VM) Value {
-        return self.chunk.constants.items[self.readByte()];
+        return self.currentFrame().function.chunk.constants.items[self.readByte()];
     }
 
     /// reads two 16bits operand
     inline fn readShort(self: *VM) u16 {
-        self.ip += 2;
-        const items = self.chunk.code.items;
-        return (@as(u16, items[self.ip - 2]) << 8) | items[self.ip - 1];
+        const frame = self.currentFrame();
+        frame.ip += 2;
+        const items = frame.function.chunk.code.items;
+        return (@as(u16, items[frame.ip - 2]) << 8) | items[frame.ip - 1];
     }
 
     inline fn readString(self: *VM) *Obj.String {

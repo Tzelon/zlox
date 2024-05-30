@@ -11,21 +11,22 @@ const debug = @import("./debug.zig");
 
 const UNIT8_COUNT = std.math.maxInt(u8) + 1;
 const errout = std.io.getStdErr().writer();
+const FunctionType = enum { TYPE_FUNCTION, TYPE_SCRIPT };
+const CompileError = error{ CompileError, TooManyConstants };
 var compilingChunk: *Chunk = undefined;
 
-pub fn compile(vm: *VM, source: []const u8, chunk: *Chunk) bool {
-    compilingChunk = chunk;
+pub fn compile(vm: *VM, source: []const u8) CompileError!*Obj.Function {
     var scanner = Scanner.init(source);
     var parser = Parser.init(&scanner);
     var locals = Locals.init(&parser);
-    var compiler = Compiler.init(vm, &parser, &locals);
+    var compiler = Compiler.init(vm, &parser, &locals, .TYPE_SCRIPT);
     parser.advance();
     while (!parser.match(.TOKEN_EOF)) {
         compiler.declaration();
     }
     parser.consume(TokenType.TOKEN_EOF, "Expect end of expression.");
-    compiler.deinit();
-    return !parser.hadError;
+    const function = compiler.deinit();
+    return if (parser.hadError) CompileError.CompileError else function;
 }
 
 const Parser = struct {
@@ -137,6 +138,8 @@ const ParseFn = *const fn (compiler: *Compiler, can_assign: bool) void;
 const Compiler = struct {
     parser: *Parser,
     locals: *Locals,
+    function: *Obj.Function,
+    type: FunctionType,
     vm: *VM,
 
     const ParseRule = struct {
@@ -163,16 +166,27 @@ const Compiler = struct {
         PREC_PRIMARY,
     };
 
-    pub fn init(vm: *VM, parser: *Parser, locals: *Locals) Compiler {
-        return Compiler{ .vm = vm, .parser = parser, .locals = locals };
+    pub fn init(vm: *VM, parser: *Parser, locals: *Locals, ftype: FunctionType) Compiler {
+        // First local is reserved to represent the current function
+        // value on the stack. Give it a name of "" to make sure it
+        // can't actually be referenced by local variables.
+        const local = &locals.locals[locals.local_count];
+        locals.local_count += 1;
+        local.depth = 0;
+        local.name.lexeme = "";
+
+        return Compiler{ .vm = vm, .parser = parser, .locals = locals, .function = Obj.Function.create(vm), .type = ftype };
     }
 
-    pub fn deinit(self: *Compiler) void {
+    pub fn deinit(self: *Compiler) *Obj.Function {
         self.emitReturn();
+        const function = self.function;
 
         if (debug.debug_print_code and !self.parser.hadError) {
-            debug.disassembleChunk(self.currentChunk(), "code");
+            debug.disassembleChunk(self.currentChunk(), if (function.name) |name| name.chars else "<script>");
         }
+
+        return function;
     }
 
     fn emitOp(self: *Compiler, opcode: OpCode) void {
@@ -235,8 +249,7 @@ const Compiler = struct {
     }
 
     fn currentChunk(self: *Compiler) *Chunk {
-        _ = self;
-        return compilingChunk;
+        return &self.function.chunk;
     }
 
     fn makeConstant(self: *Compiler, value: Value) u8 {
