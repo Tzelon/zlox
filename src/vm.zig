@@ -53,12 +53,7 @@ pub const VM = struct {
         ) catch return InterpretError.COMPILE_ERROR;
 
         self.push(Value.fromObj(&function.obj));
-        const frame = &self.frames[self.frame_count];
-        self.frame_count += 1;
-
-        frame.function = function;
-        frame.slot = self.stack_top - 1;
-        frame.ip = 0;
+        _ = self.call(function, 0);
 
         var result = try self.run();
 
@@ -76,7 +71,7 @@ pub const VM = struct {
     }
 
     fn run(self: *VM) InterpretError!InterpretResult {
-        const frame = self.currentFrame();
+        var frame = self.currentFrame();
 
         return while (true) {
             if (comptime debug_trace_execution) {
@@ -92,6 +87,14 @@ pub const VM = struct {
             }
             var instruction = OpCode.fromU8(self.readByte());
             switch (instruction) {
+                OpCode.OP_CALL => {
+                    const arg_acount = self.readByte();
+                    if (!self.callValue(self.peek(arg_acount), arg_acount)) {
+                        return InterpretError.RUNTIME_ERROR;
+                    }
+                    frame = &self.frames[self.frame_count - 1];
+                    continue;
+                },
                 OpCode.OP_RETURN => {
                     break InterpretResult.INTERPRET_OK;
                 },
@@ -258,15 +261,26 @@ pub const VM = struct {
     }
 
     fn runtimeError(self: *VM, comptime message: []const u8, args: anytype) void {
-        const frame = self.currentFrame();
-
         const err_writer = std.io.getStdErr().writer();
 
         err_writer.print(message ++ ".\n", args) catch {};
 
-        const instruction = frame.ip - 1;
-        const line = frame.function.chunk.lines.items[instruction];
-        err_writer.print("[line {d}] in script\n", .{line}) catch {};
+        var i = self.frame_count;
+        while (i > 0) {
+            i -= 1;
+
+            const frame = self.currentFrame();
+            const function = frame.function;
+            const instruction = frame.ip - 1;
+
+            err_writer.print("[line {d}] in script\n", .{function.chunk.lines.items[instruction]}) catch {};
+
+            if (function.name == null) {
+                err_writer.print("script\n", .{}) catch {};
+            } else {
+                err_writer.print("{s}()\n", .{function.name.?.chars}) catch {};
+            }
+        }
 
         self.resetStack();
     }
@@ -293,6 +307,46 @@ pub const VM = struct {
             .GREATER => self.push(Value.fromBool(lhs > rhs)),
             .LESS => self.push(Value.fromBool(lhs < rhs)),
         }
+    }
+
+    fn callValue(self: *VM, callee: Value, arg_acount: u8) bool {
+        switch (callee) {
+            .obj => |obj| {
+                switch (obj.obj_type) {
+                    Obj.Type.Function => {
+                        return self.call(obj.asFunction(), arg_acount);
+                    },
+                    else => {
+                        self.runtimeError("Can only call functions and classes.", .{});
+                        return false;
+                    },
+                }
+            },
+            else => {
+                self.runtimeError("Can only call functions and classes", .{});
+                return false;
+            },
+        }
+    }
+
+    fn call(self: *VM, function: *Obj.Function, arg_acount: u8) bool {
+        if (arg_acount != function.arity) {
+            self.runtimeError("Expected {d} arguments but got {d}", .{ function.arity, arg_acount });
+            return false;
+        }
+
+        if (self.frame_count == FRAMES_MAX) {
+            self.runtimeError("Stack overflow.", .{});
+            return false;
+        }
+
+        const frame = &self.frames[self.frame_count];
+        self.frame_count += 1;
+        frame.function = function;
+        frame.ip = 0;
+        frame.slot = self.stack_top - arg_acount - 1;
+
+        return true;
     }
 
     fn currentFrame(self: *VM) *CallFrame {

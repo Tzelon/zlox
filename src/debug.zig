@@ -44,6 +44,7 @@ pub fn disassembleInstruction(chunk: *Chunk, offset: usize) usize {
         OpCode.OP_FALSE => simpleInstruction("OP_FALSE", offset),
         OpCode.OP_NOT => simpleInstruction("OP_NOT", offset),
         OpCode.OP_POP => simpleInstruction("OP_POP", offset),
+        OpCode.OP_CALL => byteInstruction("OP_CALL", chunk, offset),
         OpCode.OP_GET_LOCAL => byteInstruction("OP_GET_LOCAL", chunk, offset),
         OpCode.OP_SET_LOCAL => byteInstruction("OP_SET_LOCAL", chunk, offset),
         OpCode.OP_GET_GLOBAL => constantInstruction("OP_GET_GLOBAL", chunk, offset),

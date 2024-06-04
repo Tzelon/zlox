@@ -15,7 +15,7 @@ const stdin = std.io.getStdIn().reader();
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     const allocator = gpa.allocator();
-    var args = try process.argsAlloc(allocator);
+    const args = try process.argsAlloc(allocator);
     defer {
         process.argsFree(allocator, args);
     }

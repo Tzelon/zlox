@@ -1,10 +1,9 @@
-{
-	if(2 == 2) {
-		print "true";
+
+	fun a() { b(); }
+	fun b() { c(); }
+	fun c() {
+		c("too", "many");
 	}
-	var x = 1;
-	while(x < 10) {
-		x = x + 1;
-		print x;
-	}
-}
+
+	a();
+

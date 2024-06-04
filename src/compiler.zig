@@ -19,7 +19,7 @@ pub fn compile(vm: *VM, source: []const u8) CompileError!*Obj.Function {
     // scanner scan the source and creates tokens
     var scanner = Scanner.init(source);
 
-    var compiler = Compiler.init(vm, .TYPE_SCRIPT);
+    var compiler = Compiler.init(vm, .TYPE_SCRIPT, null);
 
     var parser = Parser.init(vm, &scanner, &compiler);
 
@@ -103,6 +103,7 @@ const Parser = struct {
             debug.disassembleChunk(self.currentChunk(), if (func.name) |name| name.chars else "<script>");
         }
 
+        if (self.compiler.enclosing) |enclosing| self.compiler = enclosing;
         return func;
     }
 
@@ -391,12 +392,27 @@ const Parser = struct {
     }
 
     fn function(self: *Parser, ftype: FunctionType) void {
-        var compiler = Compiler.init(self.vm, ftype);
+        var compiler = Compiler.init(self.vm, ftype, self.compiler);
         self.compiler = &compiler;
         self.compiler.function.name = Obj.String.copy(self.vm, self.previous.lexeme);
         self.beginScope();
 
         self.consume(TokenType.TOKEN_LEFT_PAREN, "Expect '(' after function name.");
+        if (!self.check(TokenType.TOKEN_RIGHT_PAREN)) {
+            while (true) {
+                self.compiler.function.arity += 1;
+                if (self.compiler.function.arity > 255) {
+                    self.errorAtCurrent("Can't have more than 255 parameters");
+                }
+
+                const constant = self.parseVariable("Expect parameter name.");
+                self.defineVariable(constant);
+
+                if (!self.match(TokenType.TOKEN_COMMA)) {
+                    break;
+                }
+            }
+        }
         self.consume(TokenType.TOKEN_RIGHT_PAREN, "Expect ')' after parameters.");
         self.consume(TokenType.TOKEN_LEFT_BRACE, "Expect '{' before function body.");
         self.block();
@@ -455,6 +471,29 @@ const Parser = struct {
         }
     }
 
+    fn call(self: *Parser, _: bool) void {
+        const arg_count = self.argumentList();
+        self.emitUnaryOp(OpCode.OP_CALL, arg_count);
+    }
+
+    fn argumentList(self: *Parser) u8 {
+        var arg_count: u8 = 0;
+        if (!self.check(TokenType.TOKEN_RIGHT_PAREN)) {
+            while (true) {
+                self.expression();
+                if (arg_count == 255) {
+                    self.err("Can't have more than 255 arguments");
+                }
+                arg_count += 1;
+
+                if (!self.match(TokenType.TOKEN_COMMA)) break;
+            }
+        }
+
+        self.consume(TokenType.TOKEN_RIGHT_PAREN, "Expect ')' after arguments.");
+        return arg_count;
+    }
+
     // assuming we consumed the initial '(', we call the expression function and expect to have the closing ')' after.
     fn grouping(self: *Parser, _: bool) void {
         self.expression();
@@ -511,7 +550,7 @@ const Parser = struct {
     fn getRule(self: *Parser, ttoken: TokenType) ParseRule {
         _ = self;
         const rule = switch (ttoken) {
-            TokenType.TOKEN_LEFT_PAREN => comptime ParseRule.init(Parser.grouping, null, Precedence.PREC_NONE),
+            TokenType.TOKEN_LEFT_PAREN => comptime ParseRule.init(Parser.grouping, Parser.call, Precedence.PREC_CALL),
             TokenType.TOKEN_RIGHT_PAREN => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_LEFT_BRACE => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_RIGHT_BRACE => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
@@ -717,6 +756,7 @@ const Parser = struct {
 
 /// track the compiler state for locals - https://craftinginterpreters.com/local-variables.html#representing-local-variables
 const Compiler = struct {
+    enclosing: ?*Compiler,
     locals: [UNIT8_COUNT]Local = undefined,
     local_count: u32 = 0,
     scope_depth: u32 = 0,
@@ -729,8 +769,8 @@ const Compiler = struct {
         depth: ?u32,
     };
 
-    pub fn init(vm: *VM, ftype: FunctionType) Compiler {
-        var compiler = Compiler{ .function = Obj.Function.create(vm), .function_type = ftype };
+    pub fn init(vm: *VM, ftype: FunctionType, enclosing: ?*Compiler) Compiler {
+        var compiler = Compiler{ .function = Obj.Function.create(vm), .function_type = ftype, .enclosing = enclosing };
         // First local is reserved to represent the current function
         // value on the stack. Give it a name of "" to make sure it
         // can't actually be referenced by local variables.
