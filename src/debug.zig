@@ -75,7 +75,7 @@ pub fn jumpInstruction(name: []const u8, sign: u16, chunk: *Chunk, offset: usize
 }
 
 pub fn constantInstruction(name: []const u8, chunk: *Chunk, offset: usize) usize {
-    var constant = chunk.code.items[offset + 1];
+    const constant = chunk.code.items[offset + 1];
     std.debug.print("{s: <20} {d}   '", .{ name, constant });
     try chunk.constants.items[constant].printValue();
     std.debug.print("'\n", .{});
@@ -84,7 +84,7 @@ pub fn constantInstruction(name: []const u8, chunk: *Chunk, offset: usize) usize
 }
 
 pub fn byteInstruction(name: []const u8, chunk: *Chunk, offset: usize) usize {
-    var slot = chunk.code.items[offset + 1];
+    const slot = chunk.code.items[offset + 1];
     std.debug.print("{s: <20} {d}\n", .{ name, slot });
 
     return offset + 2;

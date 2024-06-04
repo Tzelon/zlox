@@ -55,7 +55,7 @@ pub const VM = struct {
         self.push(Value.fromObj(&function.obj));
         _ = self.call(function, 0);
 
-        var result = try self.run();
+        const result = try self.run();
 
         return result;
     }
@@ -85,7 +85,7 @@ pub const VM = struct {
                 std.debug.print("\n", .{});
                 _ = debug.disassembleInstruction(frame.function.chunk, frame.ip - frame.function.chunk.code);
             }
-            var instruction = OpCode.fromU8(self.readByte());
+            const instruction = OpCode.fromU8(self.readByte());
             switch (instruction) {
                 OpCode.OP_CALL => {
                     const arg_acount = self.readByte();
@@ -152,7 +152,7 @@ pub const VM = struct {
                     continue;
                 },
                 OpCode.OP_CONSTANT => {
-                    var constant = self.readConstant();
+                    const constant = self.readConstant();
                     self.push(constant);
                     continue;
                 },
@@ -269,11 +269,11 @@ pub const VM = struct {
         while (i > 0) {
             i -= 1;
 
-            const frame = self.currentFrame();
+            const frame = &self.frames[i];
             const function = frame.function;
             const instruction = frame.ip - 1;
 
-            err_writer.print("[line {d}] in script\n", .{function.chunk.lines.items[instruction]}) catch {};
+            err_writer.print("[line {d}] ", .{function.chunk.lines.items[instruction]}) catch {};
 
             if (function.name == null) {
                 err_writer.print("script\n", .{}) catch {};
@@ -355,7 +355,7 @@ pub const VM = struct {
 
     fn readByte(self: *VM) u8 {
         const frame = self.currentFrame();
-        var byte = frame.function.chunk.code.items[frame.ip];
+        const byte = frame.function.chunk.code.items[frame.ip];
         frame.ip += 1;
         return byte;
     }

@@ -24,11 +24,11 @@ pub const Obj = struct {
     }
 
     pub fn asString(self: *Obj) *String {
-        return @fieldParentPtr(String, "obj", self);
+        return @fieldParentPtr("obj", self);
     }
 
     pub fn asFunction(self: *Obj) *Function {
-        return @fieldParentPtr(Function, "obj", self);
+        return @fieldParentPtr("obj", self);
     }
 
     pub fn destroy(self: *Obj, vm: *VM) void {
