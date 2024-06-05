@@ -25,6 +25,10 @@ const CallFrame = struct {
     slot: usize,
 };
 
+pub fn clockNative(_: []const Value) Value {
+    return Value{ .number = @as(f64, @floatFromInt(std.time.milliTimestamp())) / 1000 };
+}
+
 pub const VM = struct {
     frames: [FRAMES_MAX]CallFrame = undefined,
     frame_count: u32 = 0,
@@ -37,7 +41,11 @@ pub const VM = struct {
     globals: Table,
 
     pub fn init(allocator: Allocator) VM {
-        return VM{ .globals = Table.init(allocator), .strings = Table.init(allocator), .objects = null, .allocator = allocator };
+        var vm = VM{ .globals = Table.init(allocator), .strings = Table.init(allocator), .objects = null, .allocator = allocator };
+
+        vm.defineNative("clock", clockNative);
+
+        return vm;
     }
 
     pub fn deinit(self: *VM) void {
@@ -96,7 +104,18 @@ pub const VM = struct {
                     continue;
                 },
                 OpCode.OP_RETURN => {
-                    break InterpretResult.INTERPRET_OK;
+                    const result = self.pop();
+                    self.frame_count -= 1;
+
+                    if (self.frame_count == 0) {
+                        _ = self.pop();
+                        break InterpretResult.INTERPRET_OK;
+                    }
+
+                    self.stack_top = frame.slot;
+                    self.push(result);
+                    frame = &self.frames[self.frame_count - 1];
+                    continue;
                 },
                 OpCode.OP_LOOP => {
                     const offset = self.readShort();
@@ -174,14 +193,18 @@ pub const VM = struct {
                 },
                 OpCode.OP_GET_LOCAL => {
                     const slot = self.readByte();
+                    // put the index in a new veriable and not inline it, increase the performence by 30x not sure why.
+                    const new_slot = self.currentFrame().slot + slot;
                     // we need to offset the stack pointer by the current frame pointer
-                    self.push(self.stack[self.currentFrame().slot + slot]);
+                    self.push(self.stack[new_slot]);
                     continue;
                 },
                 OpCode.OP_SET_LOCAL => {
                     const slot = self.readByte();
+                    // put the index in a new veriable and not inline it, increase the performence by 30x not sure why.
+                    const new_slot = self.currentFrame().slot + slot;
                     // we need to offset the stack pointer by the current frame pointer
-                    self.stack[self.currentFrame().slot + slot] = self.peek(0);
+                    self.stack[new_slot] = self.peek(0);
                     continue;
                 },
                 OpCode.OP_GET_GLOBAL => {
@@ -285,6 +308,16 @@ pub const VM = struct {
         self.resetStack();
     }
 
+    fn defineNative(self: *VM, name: []const u8, function: Obj.ObjNative.NativeFn) void {
+        self.push(Value.fromObj(&Obj.String.copy(self, name).obj));
+        self.push(Value.fromObj(&Obj.ObjNative.create(self, function).obj));
+
+        _ = self.globals.set(Obj.asString(self.stack[0].obj), self.stack[1]);
+
+        _ = self.pop();
+        _ = self.pop();
+    }
+
     fn resetStack(self: *VM) void {
         self.stack_top = 0;
         self.frame_count = 0;
@@ -315,6 +348,14 @@ pub const VM = struct {
                 switch (obj.obj_type) {
                     Obj.Type.Function => {
                         return self.call(obj.asFunction(), arg_acount);
+                    },
+                    Obj.Type.ObjNative => {
+                        const native = obj.asObjNative();
+                        const args = self.stack[self.stack_top - arg_acount - 1 ..];
+                        const result = native.function(args);
+                        self.stack_top -= arg_acount + 1;
+                        self.push(result);
+                        return true;
                     },
                     else => {
                         self.runtimeError("Can only call functions and classes.", .{});
@@ -349,7 +390,7 @@ pub const VM = struct {
         return true;
     }
 
-    fn currentFrame(self: *VM) *CallFrame {
+    inline fn currentFrame(self: *VM) *CallFrame {
         return &self.frames[self.frame_count - 1];
     }
 

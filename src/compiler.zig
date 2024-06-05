@@ -200,6 +200,7 @@ const Parser = struct {
     }
 
     fn emitReturn(self: *Parser) void {
+        self.emitOp(OpCode.OP_NIL);
         self.emitOp(OpCode.OP_RETURN);
     }
 
@@ -238,6 +239,8 @@ const Parser = struct {
             self.printStatement();
         } else if (self.match(TokenType.TOKEN_IF)) {
             self.ifStatement();
+        } else if (self.match(TokenType.TOKEN_RETURN)) {
+            self.returnStatement();
         } else if (self.match(TokenType.TOKEN_WHILE)) {
             self.whileStatement();
         } else if (self.match(TokenType.TOKEN_FOR)) {
@@ -355,6 +358,20 @@ const Parser = struct {
         }
 
         self.endScope();
+    }
+
+    fn returnStatement(self: *Parser) void {
+        if (self.compiler.function_type == .TYPE_SCRIPT) {
+            self.err("Can't return from top-level code.");
+        }
+
+        if (self.match(TokenType.TOKEN_SEMICOLON)) {
+            self.emitReturn();
+        } else {
+            self.expression();
+            self.consume(TokenType.TOKEN_SEMICOLON, "Expect ';' after return value");
+            self.emitOp(OpCode.OP_RETURN);
+        }
     }
 
     fn whileStatement(self: *Parser) void {

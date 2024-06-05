@@ -8,7 +8,7 @@ pub const Obj = struct {
     obj_type: Type,
     next: ?*Obj,
 
-    pub const Type = enum { String, Function };
+    pub const Type = enum { String, Function, ObjNative };
 
     fn create(vm: *VM, comptime T: type, objtype: Type) *T {
         const prt_t = vm.allocator.create(T) catch @panic("Error creating object\n");
@@ -31,10 +31,15 @@ pub const Obj = struct {
         return @fieldParentPtr("obj", self);
     }
 
+    pub fn asObjNative(self: *Obj) *ObjNative {
+        return @fieldParentPtr("obj", self);
+    }
+
     pub fn destroy(self: *Obj, vm: *VM) void {
         switch (self.obj_type) {
             .String => self.asString().destroy(vm),
             .Function => self.asFunction().destroy(vm),
+            .ObjNative => self.asObjNative().destroy(vm),
         }
     }
 
@@ -116,6 +121,24 @@ pub const Obj = struct {
             }
 
             return hash;
+        }
+    };
+
+    pub const ObjNative = struct {
+        obj: Obj,
+        function: NativeFn,
+
+        pub const NativeFn = *const fn (args: []Value) Value;
+
+        pub fn create(vm: *VM, func: NativeFn) *ObjNative {
+            const native = Obj.create(vm, ObjNative, .ObjNative);
+            native.function = func;
+
+            return native;
+        }
+
+        pub fn destroy(self: *ObjNative, vm: *VM) void {
+            vm.allocator.destroy(self);
         }
     };
 };

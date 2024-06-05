@@ -1,9 +1,11 @@
+var count = 0;
+fun fib(n) {
+	count =  count + 1;
+  if (n < 2) return n;
+  return fib(n - 2) + fib(n - 1);
+}
 
-	fun a() { b(); }
-	fun b() { c(); }
-	fun c() {
-		c("too", "many");
-	}
-
-	a();
-
+var start = clock();
+print fib(28);
+print clock() - start;
+print count;
