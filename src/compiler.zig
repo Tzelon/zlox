@@ -95,6 +95,7 @@ const Parser = struct {
         self.errorAtCurrent(message);
     }
 
+    /// end the compiler and return to the enclosing compiler
     pub fn endCompiler(self: *Parser) *Obj.Function {
         self.emitReturn();
         const func = self.compiler.function;
@@ -435,8 +436,15 @@ const Parser = struct {
         self.block();
 
         const func = self.endCompiler();
+        // at this point self.compiler points to the outer compiler.
 
-        self.emitConstant(Value.fromObj(&func.obj));
+        self.emitUnaryOp(OpCode.OP_CLOSURE, self.makeConstant(Value.fromObj(&func.obj)));
+
+        var i: usize = 0;
+        while (i < func.upvalue_count) : (i += 1) {
+            self.emitByte(if (compiler.upvalues[i].is_local) 1 else 0);
+            self.emitByte(compiler.upvalues[i].index);
+        }
     }
 
     fn number(self: *Parser, _: bool) void {
@@ -618,10 +626,14 @@ const Parser = struct {
 
         var arg: u8 = undefined;
 
-        if (self.resolveLocal(name)) |local_index| {
+        if (self.resolveLocal(self.compiler, name)) |local_index| {
             arg = local_index;
             get_op = OpCode.OP_GET_LOCAL;
             set_op = OpCode.OP_SET_LOCAL;
+        } else if (self.resolveUpvalue(self.compiler, name)) |local_index| {
+            arg = local_index;
+            get_op = OpCode.OP_GET_UPVALUE;
+            set_op = OpCode.OP_SET_UPVALUE;
         } else {
             arg = self.identifierConstant(name);
             get_op = OpCode.OP_GET_GLOBAL;
@@ -739,11 +751,11 @@ const Parser = struct {
         local.depth = null;
     }
 
-    fn resolveLocal(self: *Parser, name: *Token) ?u8 {
-        var i: isize = self.compiler.local_count - 1;
+    fn resolveLocal(self: *Parser, compiler: *Compiler, name: *Token) ?u8 {
+        var i: isize = compiler.local_count - 1;
 
         while (i >= 0) : (i -= 1) {
-            var local = self.compiler.locals[@intCast(i)];
+            var local = compiler.locals[@intCast(i)];
             if (identifiersEqual(name, &local.name)) {
                 if (local.depth) |_| {
                     return @intCast(i);
@@ -754,6 +766,44 @@ const Parser = struct {
         }
 
         return null;
+    }
+
+    fn resolveUpvalue(self: *Parser, compiler: *Compiler, name: *Token) ?u8 {
+        if (compiler.enclosing == null) return null;
+
+        if (self.resolveLocal(compiler.enclosing.?, name)) |local| {
+            return self.addUpvalue(compiler, local, true);
+        }
+
+        if (self.resolveUpvalue(compiler.enclosing.?, name)) |index| {
+            return self.addUpvalue(compiler, index, false);
+        }
+
+        return null;
+    }
+
+    fn addUpvalue(self: *Parser, compiler: *Compiler, index: u8, isLocal: bool) ?u8 {
+        const upvalue_count = compiler.function.upvalue_count;
+
+        var i: usize = 0;
+        while (i < upvalue_count) : (i += 1) {
+            const upvalue = &compiler.upvalues[i];
+
+            if (upvalue.index == index and upvalue.is_local == isLocal) {
+                return @intCast(i);
+            }
+        }
+
+        if (upvalue_count == UNIT8_COUNT) {
+            self.err("Too many closure variables in function.");
+            return null;
+        }
+
+        compiler.upvalues[upvalue_count].is_local = isLocal;
+        compiler.upvalues[upvalue_count].index = index;
+
+        compiler.function.upvalue_count += 1;
+        return upvalue_count;
     }
 
     fn beginScope(self: *Parser) void {
@@ -775,6 +825,7 @@ const Parser = struct {
 const Compiler = struct {
     enclosing: ?*Compiler,
     locals: [UNIT8_COUNT]Local = undefined,
+    upvalues: [UNIT8_COUNT]Upvalue = undefined,
     local_count: u32 = 0,
     scope_depth: u32 = 0,
     function: *Obj.Function,
@@ -784,6 +835,11 @@ const Compiler = struct {
         name: Token,
         /// records the scope depth of the block where the local variable was declared
         depth: ?u32,
+    };
+
+    const Upvalue = struct {
+        index: u8,
+        is_local: bool,
     };
 
     pub fn init(vm: *VM, ftype: FunctionType, enclosing: ?*Compiler) Compiler {

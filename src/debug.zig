@@ -45,8 +45,11 @@ pub fn disassembleInstruction(chunk: *Chunk, offset: usize) usize {
         OpCode.OP_NOT => simpleInstruction("OP_NOT", offset),
         OpCode.OP_POP => simpleInstruction("OP_POP", offset),
         OpCode.OP_CALL => byteInstruction("OP_CALL", chunk, offset),
+        OpCode.OP_CLOSURE => closureInstruction("OP_CLOSURE", chunk, offset),
         OpCode.OP_GET_LOCAL => byteInstruction("OP_GET_LOCAL", chunk, offset),
         OpCode.OP_SET_LOCAL => byteInstruction("OP_SET_LOCAL", chunk, offset),
+        OpCode.OP_GET_UPVALUE => byteInstruction("OP_GET_UPVALUE", chunk, offset),
+        OpCode.OP_SET_UPVALUE => byteInstruction("OP_SET_UPVALUE", chunk, offset),
         OpCode.OP_GET_GLOBAL => constantInstruction("OP_GET_GLOBAL", chunk, offset),
         OpCode.OP_SET_GLOBAL => constantInstruction("OP_SET_GLOBAL", chunk, offset),
         OpCode.OP_DEFINE_GLOBAL => constantInstruction("OP_DEFINE_GLOBAL", chunk, offset),
@@ -88,4 +91,26 @@ pub fn byteInstruction(name: []const u8, chunk: *Chunk, offset: usize) usize {
     std.debug.print("{s: <20} {d}\n", .{ name, slot });
 
     return offset + 2;
+}
+
+pub fn closureInstruction(name: []const u8, chunk: *Chunk, offset: usize) usize {
+    offset += 1;
+    const constant = chunk.code.items[offset];
+    offset += 1;
+    std.debug.print("{s: <20} {d}\n", .{ name, constant });
+    chunk.constants.items[constant].printValue();
+    std.debug.print("\n", .{});
+
+    const func = chunk.constants.items[constant].obj.asFunction();
+    var i: usize = 0;
+    while (i < func.upvalue_count) : (i += 1) {
+        const is_local = chunk.code.items[offset];
+        const value_type = if (is_local) "local" else "upvalue";
+        offset += 1;
+        const index = chunk.code.items[offset];
+        offset += 1;
+        std.debug.print("{} | {s} {}\n", .{ offset - 2, value_type, index });
+    }
+
+    return offset;
 }

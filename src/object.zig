@@ -8,7 +8,7 @@ pub const Obj = struct {
     obj_type: Type,
     next: ?*Obj,
 
-    pub const Type = enum { String, Function, ObjNative };
+    pub const Type = enum { String, Function, Native, Closure, Upvalue };
 
     fn create(vm: *VM, comptime T: type, objtype: Type) *T {
         const prt_t = vm.allocator.create(T) catch @panic("Error creating object\n");
@@ -31,7 +31,15 @@ pub const Obj = struct {
         return @fieldParentPtr("obj", self);
     }
 
-    pub fn asObjNative(self: *Obj) *ObjNative {
+    pub fn asNative(self: *Obj) *Native {
+        return @fieldParentPtr("obj", self);
+    }
+
+    pub fn asClosure(self: *Obj) *Closure {
+        return @fieldParentPtr("obj", self);
+    }
+
+    pub fn asUpvalue(self: *Obj) *Upvalue {
         return @fieldParentPtr("obj", self);
     }
 
@@ -39,21 +47,41 @@ pub const Obj = struct {
         switch (self.obj_type) {
             .String => self.asString().destroy(vm),
             .Function => self.asFunction().destroy(vm),
-            .ObjNative => self.asObjNative().destroy(vm),
+            .Native => self.asNative().destroy(vm),
+            .Closure => self.asClosure().destroy(vm),
+            .Upvalue => self.asUpvalue().destroy(vm),
         }
     }
+
+    pub const Upvalue = struct {
+        obj: Obj,
+        location: *Value,
+
+        pub fn create(vm: *VM, slot: *Value) *Upvalue {
+            const upvalue = Obj.create(vm, Upvalue, .Upvalue);
+            upvalue.location = slot;
+
+            return upvalue;
+        }
+
+        pub fn destroy(self: *Upvalue, vm: *VM) void {
+            vm.allocator.destroy(self);
+        }
+    };
 
     pub const Function = struct {
         obj: Obj,
         arity: u8,
         chunk: Chunk,
         name: ?*Obj.String,
+        upvalue_count: u8,
 
         pub fn create(vm: *VM) *Function {
             const func = Obj.create(vm, Function, .Function);
             func.arity = 0;
             func.chunk = Chunk.init(vm.allocator);
             func.name = null;
+            func.upvalue_count = 0;
 
             return func;
         }
@@ -124,20 +152,46 @@ pub const Obj = struct {
         }
     };
 
-    pub const ObjNative = struct {
+    pub const Native = struct {
         obj: Obj,
         function: NativeFn,
 
         pub const NativeFn = *const fn (args: []Value) Value;
 
-        pub fn create(vm: *VM, func: NativeFn) *ObjNative {
-            const native = Obj.create(vm, ObjNative, .ObjNative);
+        pub fn create(vm: *VM, func: NativeFn) *Native {
+            const native = Obj.create(vm, Native, .Native);
             native.function = func;
 
             return native;
         }
 
-        pub fn destroy(self: *ObjNative, vm: *VM) void {
+        pub fn destroy(self: *Native, vm: *VM) void {
+            vm.allocator.destroy(self);
+        }
+    };
+
+    pub const Closure = struct {
+        obj: Obj,
+        function: *Function,
+        upvalue_count: u8,
+        upvalues: []*Upvalue,
+
+        pub const NativeFn = *const fn (args: []Value) Value;
+
+        pub fn create(vm: *VM, func: *Function) *Closure {
+            const closure = Obj.create(vm, Closure, .Closure);
+
+            closure.function = func;
+            closure.upvalues = vm.allocator.alloc(*Upvalue, func.upvalue_count) catch @panic("Error creating Closure Upvalues");
+            closure.upvalue_count = func.upvalue_count;
+
+            return closure;
+        }
+
+        pub fn destroy(self: *Closure, vm: *VM) void {
+            vm.allocator.free(self.upvalues);
+            // NOTE: we only free the Closure not the Function.
+            // That’s because the closure doesn’t own the function.
             vm.allocator.destroy(self);
         }
     };
