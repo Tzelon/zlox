@@ -1,11 +1,8 @@
-var count = 0;
-fun fib(n) {
-	count =  count + 1;
-  if (n < 2) return n;
-  return fib(n - 2) + fib(n - 1);
+fun outer() {
+  var x = "outside";
+  fun inner() {
+    print x;
+  }
+  inner();
 }
-
-var start = clock();
-print fib(28);
-print clock() - start;
-print count;
+outer();
