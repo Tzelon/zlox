@@ -749,6 +749,7 @@ const Parser = struct {
 
         local.name = name;
         local.depth = null;
+        local.is_captured = false;
     }
 
     fn resolveLocal(self: *Parser, compiler: *Compiler, name: *Token) ?u8 {
@@ -772,6 +773,7 @@ const Parser = struct {
         if (compiler.enclosing == null) return null;
 
         if (self.resolveLocal(compiler.enclosing.?, name)) |local| {
+            compiler.enclosing.?.locals[local].is_captured = true;
             return self.addUpvalue(compiler, local, true);
         }
 
@@ -816,7 +818,11 @@ const Parser = struct {
         while (self.compiler.local_count > 0 and
             self.compiler.locals[self.compiler.local_count - 1].depth.? > self.compiler.scope_depth) : (self.compiler.local_count -= 1)
         {
-            self.emitOp(OpCode.OP_POP);
+            if (self.compiler.locals[self.compiler.local_count - 1].is_captured) {
+                self.emitOp(OpCode.OP_CLOSE_UPVALUE);
+            } else {
+                self.emitOp(OpCode.OP_POP);
+            }
         }
     }
 };
@@ -835,6 +841,8 @@ const Compiler = struct {
         name: Token,
         /// records the scope depth of the block where the local variable was declared
         depth: ?u32,
+        /// is captured by closure
+        is_captured: bool,
     };
 
     const Upvalue = struct {
@@ -850,6 +858,7 @@ const Compiler = struct {
         var local = &compiler.locals[compiler.local_count];
         compiler.local_count += 1;
         local.depth = 0;
+        local.is_captured = false;
         local.name.lexeme = "";
 
         return compiler;

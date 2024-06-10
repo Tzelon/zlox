@@ -56,10 +56,13 @@ pub const Obj = struct {
     pub const Upvalue = struct {
         obj: Obj,
         location: *Value,
+        closed: Value = undefined,
+        next: ?*Upvalue,
 
         pub fn create(vm: *VM, slot: *Value) *Upvalue {
             const upvalue = Obj.create(vm, Upvalue, .Upvalue);
             upvalue.location = slot;
+            upvalue.next = null;
 
             return upvalue;
         }

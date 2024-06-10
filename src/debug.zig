@@ -32,6 +32,7 @@ pub fn disassembleInstruction(chunk: *Chunk, offset: usize) usize {
     return switch (instruction) {
         OpCode.OP_NEGATE => simpleInstruction("OP_NEGATE", offset),
         OpCode.OP_CONSTANT => constantInstruction("OP_CONSTANT", chunk, offset),
+        OpCode.OP_CLOSE_UPVALUE => simpleInstruction("OP_CLOSE_UPVALUE", chunk, offset),
         OpCode.OP_ADD => simpleInstruction("OP_ADD", offset),
         OpCode.OP_SUBTRACT => simpleInstruction("OP_SUBSTACT", offset),
         OpCode.OP_MULTIPLY => simpleInstruction("OP_MULTIPLY", offset),

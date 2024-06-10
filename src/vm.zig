@@ -36,12 +36,13 @@ pub const VM = struct {
     stack_top: usize = 0,
     allocator: Allocator,
     strings: Table,
+    open_upvalues: ?*Obj.Upvalue,
     /// pointer to the head of the objects list
     objects: ?*Obj,
     globals: Table,
 
     pub fn init(allocator: Allocator) VM {
-        var vm = VM{ .globals = Table.init(allocator), .strings = Table.init(allocator), .objects = null, .allocator = allocator };
+        var vm = VM{ .globals = Table.init(allocator), .strings = Table.init(allocator), .objects = null, .allocator = allocator, .open_upvalues = null };
 
         vm.defineNative("clock", clockNative);
 
@@ -125,8 +126,14 @@ pub const VM = struct {
 
                     continue;
                 },
+                OpCode.OP_CLOSE_UPVALUE => {
+                    self.closeUpvalues(&self.stack[self.stack_top - 1]);
+                    _ = self.pop();
+                    continue;
+                },
                 OpCode.OP_RETURN => {
                     const result = self.pop();
+                    self.closeUpvalues(&self.stack[frame.slot]);
                     self.frame_count -= 1;
 
                     if (self.frame_count == 0) {
@@ -403,9 +410,36 @@ pub const VM = struct {
     }
 
     fn captureUpvalue(self: *VM, local: *Value) *Obj.Upvalue {
+        var prev_upvalue: ?*Obj.Upvalue = null;
+        var upvalue = self.open_upvalues;
+        while (upvalue != null and @intFromPtr(upvalue.?.location) > @intFromPtr(local)) {
+            prev_upvalue = upvalue;
+            upvalue = upvalue.?.next;
+        }
+
+        if (upvalue != null and upvalue.?.location == local) {
+            return upvalue.?;
+        }
+
         const createdUpvalue = Obj.Upvalue.create(self, local);
 
+        createdUpvalue.next = upvalue;
+        if (prev_upvalue == null) {
+            self.open_upvalues = createdUpvalue;
+        } else {
+            prev_upvalue.?.next = createdUpvalue;
+        }
+
         return createdUpvalue;
+    }
+
+    fn closeUpvalues(self: *VM, last: *Value) void {
+        while (self.open_upvalues != null and @intFromPtr(self.open_upvalues.?.location) >= @intFromPtr(last)) {
+            const upvalue = self.open_upvalues.?;
+            upvalue.closed = upvalue.location.*;
+            upvalue.location = &upvalue.closed;
+            self.open_upvalues = upvalue.next;
+        }
     }
 
     fn call(self: *VM, closure: *Obj.Closure, arg_acount: u8) bool {

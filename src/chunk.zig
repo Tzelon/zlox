@@ -6,6 +6,7 @@ const Allocator = std.mem.Allocator;
 pub const OpCode = enum(u8) {
     OP_RETURN,
     OP_CONSTANT,
+    OP_CLOSE_UPVALUE,
     OP_CLOSURE,
     OP_NEGATE,
     OP_PRINT,
