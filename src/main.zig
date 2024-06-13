@@ -6,6 +6,7 @@ const Chunk = @import("./chunk.zig").Chunk;
 const OpCode = @import("./chunk.zig").OpCode;
 const debug = @import("./debug.zig");
 const VM = @import("./vm.zig").VM;
+const GCAllocator = @import("./memory.zig").GCAllocator;
 const Allocator = std.mem.Allocator;
 
 const errout = std.io.getStdErr().writer();
@@ -53,7 +54,9 @@ fn repl(allocator: Allocator) !void {
 }
 
 fn runFile(allocator: Allocator, path: []const u8) !void {
-    var vm = VM.init(allocator);
+    var gc = GCAllocator.init(allocator);
+    var vm = VM.init(gc.allocator());
+    gc.enableGC(&vm);
     defer vm.deinit();
     const source = try std.fs.cwd().readFileAlloc(allocator, path, 1_000_000);
     defer allocator.free(source);

@@ -1,22 +1,15 @@
-var closure;
+fun outer() {
+	var x = "outside";
+	var y = "xxx";
+	fun inner() {
+		print x;
+		print y;
 
-{
-  var a = "a";
+	}
 
-  {
-    var b = "b";
-    fun returnA() {
-      return a;
-    }
-
-    closure = returnA;
-
-    if (false) {
-      fun returnB() {
-        return b;
-      }
-    }
-  }
-
-  print closure(); // expect: a
+	return inner;
 }
+
+var closure = outer();
+closure();
+

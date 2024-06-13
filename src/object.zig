@@ -7,6 +7,7 @@ const Allocator = std.mem.Allocator;
 pub const Obj = struct {
     obj_type: Type,
     next: ?*Obj,
+    is_mark: bool = false,
 
     pub const Type = enum { String, Function, Native, Closure, Upvalue };
 

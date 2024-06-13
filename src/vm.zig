@@ -6,6 +6,7 @@ const Value = @import("./value.zig").Value;
 const Obj = @import("./object.zig").Obj;
 const Table = @import("./table.zig").Table;
 const compile = @import("./compiler.zig").compile;
+const Parser = @import("./compiler.zig").Parser;
 const debug = @import("./debug.zig");
 const debug_trace_execution = debug.debug_trace_execution;
 
@@ -40,9 +41,16 @@ pub const VM = struct {
     /// pointer to the head of the objects list
     objects: ?*Obj,
     globals: Table,
+    gray_stack: std.ArrayList(*Obj),
+    parser: ?*Parser = null,
 
     pub fn init(allocator: Allocator) VM {
-        var vm = VM{ .globals = Table.init(allocator), .strings = Table.init(allocator), .objects = null, .allocator = allocator, .open_upvalues = null };
+        // NOTE, purposely uses the backing allocator to avoid having
+        // growing the grayStack during GC kick off more GC.
+        var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+        const gc_allocator = gpa.allocator();
+
+        var vm = VM{ .globals = Table.init(allocator), .strings = Table.init(allocator), .objects = null, .allocator = allocator, .open_upvalues = null, .gray_stack = std.ArrayList(*Obj).init(gc_allocator) };
 
         vm.defineNative("clock", clockNative);
 
@@ -52,6 +60,7 @@ pub const VM = struct {
     pub fn deinit(self: *VM) void {
         self.strings.deinit();
         self.globals.deinit();
+        self.gray_stack.deinit();
         self.freeObjects();
     }
 

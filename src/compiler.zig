@@ -22,6 +22,10 @@ pub fn compile(vm: *VM, source: []const u8) CompileError!*Obj.Function {
     var compiler = Compiler.init(vm, .TYPE_SCRIPT, null);
 
     var parser = Parser.init(vm, &scanner, &compiler);
+    // Register the parser with the VM. Need to do this so that the
+    // garbage collector can reach the parser's current compiler.
+    vm.parser = &parser;
+    defer vm.parser = null;
 
     // start the program parsing
     parser.advance();
@@ -61,7 +65,7 @@ const Precedence = enum {
 /// parser is doing two things
 /// 1. get the next token from the scanner and make sense of the program.
 /// 2. generate code for the vm to use.
-const Parser = struct {
+pub const Parser = struct {
     vm: *VM,
     compiler: *Compiler,
     scanner: *Scanner,
@@ -828,7 +832,7 @@ const Parser = struct {
 };
 
 /// track the compiler state for locals - https://craftinginterpreters.com/local-variables.html#representing-local-variables
-const Compiler = struct {
+pub const Compiler = struct {
     enclosing: ?*Compiler,
     locals: [UNIT8_COUNT]Local = undefined,
     upvalues: [UNIT8_COUNT]Upvalue = undefined,
