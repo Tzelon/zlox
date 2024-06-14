@@ -65,6 +65,7 @@ pub const GCAllocator = struct {
         self.sweep();
 
         if (debug_log_gc) {
+            std.debug.print("\n", .{});
             std.log.debug("[GC] end\n", .{});
         }
     }
@@ -104,7 +105,7 @@ pub const GCAllocator = struct {
 
     fn blackenObject(self: *GCAllocator, object: *Obj) void {
         if (debug_log_gc) {
-            std.log.debug("[GC] {any} blacken", .{object});
+            std.log.debug("[GC] {any} blacken", .{object.obj_type});
         }
 
         switch (object.obj_type) {
@@ -135,7 +136,7 @@ pub const GCAllocator = struct {
     fn markObject(self: *GCAllocator, object: *Obj) void {
         if (object.is_mark) return;
         if (debug_log_gc) {
-            std.debug.print("debug: {*} ---  ", .{object});
+            std.debug.print("debug: [GC] mark object {*} ---  ", .{object});
             Value.printValue(Value.fromObj(object)) catch unreachable;
             std.debug.print(" ---  \n", .{});
         }
@@ -185,12 +186,8 @@ pub const GCAllocator = struct {
     }
 
     fn markTable(self: *GCAllocator, table: *Table) void {
-        var i: usize = 0;
-        while (i < table.count) : (i += 1) {
-            const entry = &table.entries[i];
-            if (entry.key != null) {
-                self.markObject(&entry.key.?.obj);
-            }
+        for (table.entries) |*entry| {
+            if (entry.key) |key| self.markObject(&key.obj);
             self.markValue(&entry.value);
         }
     }

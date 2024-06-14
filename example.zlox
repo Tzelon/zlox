@@ -1,15 +1,7 @@
 fun outer() {
+	clock();
 	var x = "outside";
-	var y = "xxx";
-	fun inner() {
-		print x;
-		print y;
-
-	}
-
-	return inner;
+	return x;
 }
-
-var closure = outer();
-closure();
+print outer();
 
