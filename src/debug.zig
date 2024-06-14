@@ -5,7 +5,7 @@ const printValue = @import("./Value.zig").printValue;
 
 pub const debug_trace_execution = false;
 pub const debug_print_code = false;
-pub const debug_stress_gc = true;
+pub const debug_stress_gc = false;
 pub const debug_log_gc = true;
 
 pub fn disassembleChunk(chunk: *Chunk, name: []const u8) void {

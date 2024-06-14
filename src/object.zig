@@ -134,7 +134,9 @@ pub const Obj = struct {
             str.chars = chars;
             str.hash = hash;
 
+            vm.push(Value.fromObj(&str.obj));
             _ = vm.strings.set(str, Value.fromNil());
+            _ = vm.pop();
 
             return str;
         }

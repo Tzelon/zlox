@@ -8,6 +8,8 @@ const debug_stress_gc = @import("./debug.zig").debug_stress_gc;
 const debug_log_gc = @import("./debug.zig").debug_log_gc;
 const Allocator = std.mem.Allocator;
 
+const GC_HEAP_GROW_FACTOR = 2;
+
 pub const GCAllocator = struct {
     parent_allocator: Allocator,
     vm: ?*VM = null,
@@ -37,11 +39,14 @@ pub const GCAllocator = struct {
 
     fn resize(ctx: *anyopaque, buf: []u8, log2_buf_align: u8, new_len: usize, ret_addr: usize) bool {
         const self: *GCAllocator = @ptrCast(@alignCast(ctx));
+        self.vm.?.bytes_allocated += new_len - buf.len;
 
-        if (new_len > buf.len) {
-            if (debug_stress_gc) {
-                self.collectGarbage();
-            }
+        if (self.vm.?.bytes_allocated > self.vm.?.next_gc) {
+            self.collectGarbage();
+        }
+
+        if (debug_stress_gc) {
+            self.collectGarbage();
         }
 
         return self.parent_allocator.rawResize(buf, log2_buf_align, new_len, ret_addr);
@@ -56,16 +61,21 @@ pub const GCAllocator = struct {
     }
 
     pub fn collectGarbage(self: *GCAllocator) void {
+        const vm = self.vm.?;
+        var before: usize = 0;
         if (debug_log_gc) {
             std.log.debug("[GC] begin\n", .{});
+            before = vm.bytes_allocated;
         }
         self.markRoots();
         self.traceReferences();
-        // self.tableRemoveWhite();
+        self.tableRemoveWhite();
         self.sweep();
 
+        vm.next_gc = vm.bytes_allocated * GC_HEAP_GROW_FACTOR;
+
         if (debug_log_gc) {
-            std.debug.print("\n", .{});
+            std.debug.print("\n collected {} bytes (from {} to {}) next at {} \n", .{ before - vm.bytes_allocated, before, vm.bytes_allocated, vm.next_gc });
             std.log.debug("[GC] end\n", .{});
         }
     }

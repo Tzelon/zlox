@@ -42,7 +42,11 @@ pub const VM = struct {
     objects: ?*Obj,
     globals: Table,
     gray_stack: std.ArrayList(*Obj),
+
+    /// gc properties
     parser: ?*Parser = null,
+    bytes_allocated: usize,
+    next_gc: usize,
 
     pub fn init(allocator: Allocator) VM {
         // NOTE, purposely uses the backing allocator to avoid having
@@ -50,7 +54,7 @@ pub const VM = struct {
         var gpa = std.heap.GeneralPurposeAllocator(.{}){};
         const gc_allocator = gpa.allocator();
 
-        var vm = VM{ .globals = Table.init(allocator), .strings = Table.init(allocator), .objects = null, .allocator = allocator, .open_upvalues = null, .gray_stack = std.ArrayList(*Obj).init(gc_allocator) };
+        var vm = VM{ .bytes_allocated = 0, .next_gc = 1024 * 1024, .globals = Table.init(allocator), .strings = Table.init(allocator), .objects = null, .allocator = allocator, .open_upvalues = null, .gray_stack = std.ArrayList(*Obj).init(gc_allocator) };
 
         vm.defineNative("clock", clockNative);
 
@@ -311,10 +315,13 @@ pub const VM = struct {
     }
 
     fn concatenate(self: *VM) void {
-        const b = self.pop().obj.asString();
-        const a = self.pop().obj.asString();
+        const b = self.peek(0).obj.asString();
+        const a = self.peek(1).obj.asString();
         const heap = std.mem.concat(self.allocator, u8, &[_][]const u8{ a.chars, b.chars }) catch unreachable;
         const obj = Obj.String.take(self, heap);
+
+        _ = self.pop();
+        _ = self.pop();
 
         self.push(Value.fromObj(&obj.obj));
     }

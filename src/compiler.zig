@@ -214,7 +214,11 @@ pub const Parser = struct {
     }
 
     fn makeConstant(self: *Parser, value: Value) u8 {
+        // Make sure value is visible to the GC while addConstant
+        // allocates
+        self.vm.push(value);
         const constant = self.currentChunk().addConstant(value) catch 0;
+        _ = self.vm.pop();
         if (constant > std.math.maxInt(u8)) {
             std.debug.print("too mant constants in one chunk", .{});
             return 0;

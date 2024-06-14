@@ -1,7 +1,23 @@
+{
+	fun root() {}
+}
+
+print "out of root";
 fun outer() {
-	clock();
 	var x = "outside";
+	var y = "osutside";
+	var z = "odsadsutside";
+	var u = "odsadjkhutside";
+
 	return x;
 }
-print outer();
 
+
+fun inner() {
+	print 1 + 1;
+
+}
+
+
+print outer();
+inner();
