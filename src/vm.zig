@@ -120,6 +120,10 @@ pub const VM = struct {
                     frame = &self.frames[self.frame_count - 1];
                     continue;
                 },
+                OpCode.OP_CLASS => {
+                    const name = self.readString();
+                    self.push(Value.fromObj(&Obj.Class.create(self, name).obj));
+                },
                 OpCode.OP_CLOSURE => {
                     const func = self.readConstant().obj.asFunction();
                     const closure = Obj.Closure.create(self, func);
@@ -231,6 +235,41 @@ pub const VM = struct {
                 },
                 OpCode.OP_POP => {
                     _ = self.pop();
+                    continue;
+                },
+                OpCode.OP_GET_PROPERTY => {
+                    if (!Obj.isA(self.peek(0), .Instance)) {
+                        self.runtimeError("Only instances have properties", .{});
+                        return InterpretError.RUNTIME_ERROR;
+                    }
+
+                    const instance = self.peek(0).obj.asInstance();
+                    const name = self.readString();
+
+                    var value: Value = undefined;
+
+                    if (Table.get(&instance.fields, name, &value)) {
+                        _ = self.pop();
+                        self.push(value);
+                        continue;
+                    } else {
+                        self.runtimeError("Undefined property '{s}'.", .{name.chars});
+                        return InterpretError.RUNTIME_ERROR;
+                    }
+                },
+                OpCode.OP_SET_PROPERTY => {
+                    if (!Obj.isA(self.peek(1), .Instance)) {
+                        self.runtimeError("Only instances have fields", .{});
+                        return InterpretError.RUNTIME_ERROR;
+                    }
+
+                    const instance = self.peek(1).obj.asInstance();
+                    const name = self.readString();
+                    _ = Table.set(&instance.fields, name, self.peek(0));
+
+                    const value = self.pop();
+                    _ = self.pop();
+                    self.push(value);
                     continue;
                 },
                 OpCode.OP_GET_UPVALUE => {
@@ -411,6 +450,11 @@ pub const VM = struct {
                     },
                     Obj.Type.Closure => {
                         return self.call(obj.asClosure(), arg_acount);
+                    },
+                    Obj.Type.Class => {
+                        const class = obj.asClass();
+                        self.stack[self.stack_top - arg_acount - 1] = Value.fromObj(&Obj.Instance.create(self, class).obj);
+                        return true;
                     },
                     else => {
                         self.runtimeError("Can only call functions and classes.", .{});

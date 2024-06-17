@@ -55,9 +55,11 @@ pub const Value = union(ValueType) {
             .nil => |val| std.debug.print("{}", .{val}),
             .boolean => |val| std.debug.print("{}", .{val}),
             .obj => |val| switch (val.obj_type) {
+                .Class => std.debug.print("{s}", .{val.asClass().name.chars}),
                 .String => std.debug.print("{s}", .{val.asString().chars}),
                 .Upvalue => std.debug.print("upvalue", .{}),
                 .Native => std.debug.print("<native fn>", .{}),
+                .Instance => std.debug.print("{s} instance", .{val.asInstance().class.name.chars}),
                 .Function => {
                     const name = if (val.asFunction().name) |name| name.chars else "script";
                     std.debug.print("<fn {s}>", .{name});

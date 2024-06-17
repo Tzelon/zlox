@@ -1,23 +1,6 @@
-{
-	fun root() {}
-}
+class Pair {}
 
-print "out of root";
-fun outer() {
-	var x = "outside";
-	var y = "osutside";
-	var z = "odsadsutside";
-	var u = "odsadjkhutside";
-
-	return x;
-}
-
-
-fun inner() {
-	print 1 + 1;
-
-}
-
-
-print outer();
-inner();
+var pair = Pair();
+pair.first = 1;
+pair.second = 2;
+print pair.first + pair.second; // 3.

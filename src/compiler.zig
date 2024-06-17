@@ -232,7 +232,9 @@ pub const Parser = struct {
     }
 
     fn declaration(self: *Parser) void {
-        if (self.match(TokenType.TOKEN_FUN)) {
+        if (self.match(TokenType.TOKEN_CLASS)) {
+            self.classDeclaration();
+        } else if (self.match(TokenType.TOKEN_FUN)) {
             self.funDeclaration();
         } else if (self.match(TokenType.TOKEN_VAR)) {
             self.varDeclaration();
@@ -269,6 +271,17 @@ pub const Parser = struct {
         }
 
         self.consume(TokenType.TOKEN_RIGHT_BRACE, "Expect '}' after block.");
+    }
+
+    fn classDeclaration(self: *Parser) void {
+        self.consume(TokenType.TOKEN_IDENTIFIER, "Expect class name");
+        const name = self.identifierConstant(&self.previous);
+        self.declareVariable();
+
+        self.emitUnaryOp(OpCode.OP_CLASS, name);
+        self.defineVariable(name);
+        self.consume(TokenType.TOKEN_LEFT_BRACE, "Expect '{' before class body.");
+        self.consume(TokenType.TOKEN_RIGHT_BRACE, "Expect '}' after class body.");
     }
 
     fn funDeclaration(self: *Parser) void {
@@ -491,8 +504,8 @@ pub const Parser = struct {
         self.emitConstant(Value.fromObj(&value.obj));
     }
 
-    fn variable(self: *Parser, can_assing: bool) void {
-        self.namedVariable(&self.previous, can_assing);
+    fn variable(self: *Parser, can_assign: bool) void {
+        self.namedVariable(&self.previous, can_assign);
     }
 
     fn literal(self: *Parser, _: bool) void {
@@ -531,6 +544,17 @@ pub const Parser = struct {
     fn grouping(self: *Parser, _: bool) void {
         self.expression();
         self.consume(TokenType.TOKEN_RIGHT_PAREN, "Expect ')' after expression.");
+    }
+
+    fn dot(self: *Parser, can_assign: bool) void {
+        self.consume(TokenType.TOKEN_IDENTIFIER, "Expect property name after '.'.");
+        const name = self.identifierConstant(&self.previous);
+        if (can_assign and self.match(TokenType.TOKEN_EQUAL)) {
+            self.expression();
+            self.emitUnaryOp(OpCode.OP_SET_PROPERTY, name);
+        } else {
+            self.emitUnaryOp(OpCode.OP_GET_PROPERTY, name);
+        }
     }
 
     fn unary(self: *Parser, _: bool) void {
@@ -588,7 +612,7 @@ pub const Parser = struct {
             TokenType.TOKEN_LEFT_BRACE => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_RIGHT_BRACE => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_COMMA => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
-            TokenType.TOKEN_DOT => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
+            TokenType.TOKEN_DOT => comptime ParseRule.init(null, Parser.dot, Precedence.PREC_CALL),
             TokenType.TOKEN_MINUS => comptime ParseRule.init(Parser.unary, Parser.binary, Precedence.PREC_TERM),
             TokenType.TOKEN_PLUS => comptime ParseRule.init(null, Parser.binary, Precedence.PREC_TERM),
             TokenType.TOKEN_SEMICOLON => comptime ParseRule.init(null, null, Precedence.PREC_NONE),

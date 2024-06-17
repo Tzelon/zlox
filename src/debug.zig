@@ -34,6 +34,7 @@ pub fn disassembleInstruction(chunk: *Chunk, offset: usize) usize {
     return switch (instruction) {
         OpCode.OP_NEGATE => simpleInstruction("OP_NEGATE", offset),
         OpCode.OP_CONSTANT => constantInstruction("OP_CONSTANT", chunk, offset),
+        OpCode.OP_CLASS => constantInstruction("OP_CLASS", chunk, offset),
         OpCode.OP_CLOSE_UPVALUE => simpleInstruction("OP_CLOSE_UPVALUE", chunk, offset),
         OpCode.OP_ADD => simpleInstruction("OP_ADD", offset),
         OpCode.OP_SUBTRACT => simpleInstruction("OP_SUBSTACT", offset),
@@ -49,6 +50,8 @@ pub fn disassembleInstruction(chunk: *Chunk, offset: usize) usize {
         OpCode.OP_POP => simpleInstruction("OP_POP", offset),
         OpCode.OP_CALL => byteInstruction("OP_CALL", chunk, offset),
         OpCode.OP_CLOSURE => closureInstruction("OP_CLOSURE", chunk, offset),
+        OpCode.OP_GET_PROPERTY => constantInstruction("OP_GET_PROPERTY", chunk, offset),
+        OpCode.OP_SET_PROPERTY => constantInstruction("OP_SET_PROPERTY", chunk, offset),
         OpCode.OP_GET_LOCAL => byteInstruction("OP_GET_LOCAL", chunk, offset),
         OpCode.OP_SET_LOCAL => byteInstruction("OP_SET_LOCAL", chunk, offset),
         OpCode.OP_GET_UPVALUE => byteInstruction("OP_GET_UPVALUE", chunk, offset),

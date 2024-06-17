@@ -134,6 +134,15 @@ pub const GCAllocator = struct {
                     self.markObject(&closure.upvalues[i].obj);
                 }
             },
+            .Class => {
+                const name = Obj.asClass(object);
+                self.markObject(&name.obj);
+            },
+            .Instance => {
+                const instance = Obj.asInstance(object);
+                self.markObject(&instance.class.obj);
+                self.markTable(&instance.fields);
+            },
             .Native, .String => return,
         }
     }

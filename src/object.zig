@@ -1,5 +1,6 @@
 const std = @import("std");
 const Value = @import("./value.zig").Value;
+const Table = @import("./table.zig").Table;
 const Chunk = @import("./chunk.zig").Chunk;
 const VM = @import("./vm.zig").VM;
 const Allocator = std.mem.Allocator;
@@ -9,7 +10,7 @@ pub const Obj = struct {
     next: ?*Obj,
     is_mark: bool = false,
 
-    pub const Type = enum { String, Function, Native, Closure, Upvalue };
+    pub const Type = enum { String, Function, Native, Closure, Upvalue, Class, Instance };
 
     fn create(vm: *VM, comptime T: type, objtype: Type) *T {
         const prt_t = vm.allocator.create(T) catch @panic("Error creating object\n");
@@ -44,6 +45,14 @@ pub const Obj = struct {
         return @fieldParentPtr("obj", self);
     }
 
+    pub fn asClass(self: *Obj) *Class {
+        return @fieldParentPtr("obj", self);
+    }
+
+    pub fn asInstance(self: *Obj) *Instance {
+        return @fieldParentPtr("obj", self);
+    }
+
     pub fn destroy(self: *Obj, vm: *VM) void {
         switch (self.obj_type) {
             .String => self.asString().destroy(vm),
@@ -51,6 +60,8 @@ pub const Obj = struct {
             .Native => self.asNative().destroy(vm),
             .Closure => self.asClosure().destroy(vm),
             .Upvalue => self.asUpvalue().destroy(vm),
+            .Class => self.asClass().destroy(vm),
+            .Instance => self.asInstance().destroy(vm),
         }
     }
 
@@ -198,6 +209,43 @@ pub const Obj = struct {
             vm.allocator.free(self.upvalues);
             // NOTE: we only free the Closure not the Function.
             // That’s because the closure doesn’t own the function.
+            vm.allocator.destroy(self);
+        }
+    };
+
+    pub const Class = struct {
+        obj: Obj,
+        name: *String,
+
+        pub fn create(vm: *VM, name: *String) *Class {
+            const class = Obj.create(vm, Class, .Class);
+
+            class.name = name;
+
+            return class;
+        }
+
+        pub fn destroy(self: *Class, vm: *VM) void {
+            vm.allocator.destroy(self);
+        }
+    };
+
+    pub const Instance = struct {
+        obj: Obj,
+        class: *Class,
+        fields: Table,
+
+        pub fn create(vm: *VM, class: *Class) *Instance {
+            const instance = Obj.create(vm, Instance, .Instance);
+
+            instance.class = class;
+            instance.fields = Table.init(vm.allocator);
+
+            return instance;
+        }
+
+        pub fn destroy(self: *Instance, vm: *VM) void {
+            self.fields.deinit();
             vm.allocator.destroy(self);
         }
     };
