@@ -137,11 +137,17 @@ pub const GCAllocator = struct {
             .Class => {
                 const name = Obj.asClass(object);
                 self.markObject(&name.obj);
+                self.markTable(&name.methods);
             },
             .Instance => {
                 const instance = Obj.asInstance(object);
                 self.markObject(&instance.class.obj);
                 self.markTable(&instance.fields);
+            },
+            .BoundMethod => {
+                const bound = Obj.asBoundMethod(object);
+                self.markValue(&bound.receiver);
+                self.markObject(&bound.method.obj);
             },
             .Native, .String => return,
         }

@@ -9,6 +9,7 @@ pub const OpCode = enum(u8) {
     OP_CLOSE_UPVALUE,
     OP_CLOSURE,
     OP_CLASS,
+    OP_METHOD,
     OP_NEGATE,
     OP_PRINT,
     OP_JUMP_IF_FALSE,

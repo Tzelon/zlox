@@ -10,7 +10,7 @@ pub const Obj = struct {
     next: ?*Obj,
     is_mark: bool = false,
 
-    pub const Type = enum { String, Function, Native, Closure, Upvalue, Class, Instance };
+    pub const Type = enum { String, Function, Native, Closure, Upvalue, Class, Instance, BoundMethod };
 
     fn create(vm: *VM, comptime T: type, objtype: Type) *T {
         const prt_t = vm.allocator.create(T) catch @panic("Error creating object\n");
@@ -53,6 +53,10 @@ pub const Obj = struct {
         return @fieldParentPtr("obj", self);
     }
 
+    pub fn asBoundMethod(self: *Obj) *BoundMethod {
+        return @fieldParentPtr("obj", self);
+    }
+
     pub fn destroy(self: *Obj, vm: *VM) void {
         switch (self.obj_type) {
             .String => self.asString().destroy(vm),
@@ -62,6 +66,7 @@ pub const Obj = struct {
             .Upvalue => self.asUpvalue().destroy(vm),
             .Class => self.asClass().destroy(vm),
             .Instance => self.asInstance().destroy(vm),
+            .BoundMethod => self.asBoundMethod().destroy(vm),
         }
     }
 
@@ -216,16 +221,38 @@ pub const Obj = struct {
     pub const Class = struct {
         obj: Obj,
         name: *String,
+        methods: Table,
 
         pub fn create(vm: *VM, name: *String) *Class {
             const class = Obj.create(vm, Class, .Class);
 
             class.name = name;
+            class.methods = Table.init(vm.allocator);
 
             return class;
         }
 
         pub fn destroy(self: *Class, vm: *VM) void {
+            self.methods.deinit();
+            vm.allocator.destroy(self);
+        }
+    };
+
+    pub const BoundMethod = struct {
+        obj: Obj,
+        method: *Closure,
+        receiver: Value,
+
+        pub fn create(vm: *VM, method: *Closure, receiver: Value) *BoundMethod {
+            const bound_method = Obj.create(vm, BoundMethod, .BoundMethod);
+
+            bound_method.method = method;
+            bound_method.receiver = receiver;
+
+            return bound_method;
+        }
+
+        pub fn destroy(self: *BoundMethod, vm: *VM) void {
             vm.allocator.destroy(self);
         }
     };

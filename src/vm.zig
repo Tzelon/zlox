@@ -124,6 +124,9 @@ pub const VM = struct {
                     const name = self.readString();
                     self.push(Value.fromObj(&Obj.Class.create(self, name).obj));
                 },
+                OpCode.OP_METHOD => {
+                    self.defineMethod(self.readString());
+                },
                 OpCode.OP_CLOSURE => {
                     const func = self.readConstant().obj.asFunction();
                     const closure = Obj.Closure.create(self, func);
@@ -252,10 +255,12 @@ pub const VM = struct {
                         _ = self.pop();
                         self.push(value);
                         continue;
-                    } else {
-                        self.runtimeError("Undefined property '{s}'.", .{name.chars});
+                    }
+
+                    if (!self.bindMethod(instance.class, name)) {
                         return InterpretError.RUNTIME_ERROR;
                     }
+                    continue;
                 },
                 OpCode.OP_SET_PROPERTY => {
                     if (!Obj.isA(self.peek(1), .Instance)) {
@@ -412,6 +417,14 @@ pub const VM = struct {
         _ = self.pop();
     }
 
+    fn defineMethod(self: *VM, name: *Obj.String) void {
+        const method = self.peek(0);
+        const class = Obj.asClass(self.peek(1).obj);
+
+        _ = class.methods.set(name, method);
+        _ = self.pop();
+    }
+
     fn resetStack(self: *VM) void {
         self.stack_top = 0;
         self.frame_count = 0;
@@ -456,6 +469,10 @@ pub const VM = struct {
                         self.stack[self.stack_top - arg_acount - 1] = Value.fromObj(&Obj.Instance.create(self, class).obj);
                         return true;
                     },
+                    Obj.Type.BoundMethod => {
+                        const bound = obj.asBoundMethod();
+                        return self.call(bound.method, arg_acount);
+                    },
                     else => {
                         self.runtimeError("Can only call functions and classes.", .{});
                         return false;
@@ -467,6 +484,20 @@ pub const VM = struct {
                 return false;
             },
         }
+    }
+
+    fn bindMethod(self: *VM, class: *Obj.Class, name: *Obj.String) bool {
+        var method: Value = undefined;
+
+        if (!class.methods.get(name, &method)) {
+            self.runtimeError("Undefined property '{s}'", .{name.chars});
+            return false;
+        }
+        const bound = Obj.BoundMethod.create(self, Obj.asClosure(method.obj), self.peek(0));
+        _ = self.pop();
+        self.push(Value.fromObj(&bound.obj));
+
+        return true;
     }
 
     fn captureUpvalue(self: *VM, local: *Value) *Obj.Upvalue {

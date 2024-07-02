@@ -275,13 +275,19 @@ pub const Parser = struct {
 
     fn classDeclaration(self: *Parser) void {
         self.consume(TokenType.TOKEN_IDENTIFIER, "Expect class name");
+        var class_name = self.previous;
         const name = self.identifierConstant(&self.previous);
         self.declareVariable();
 
         self.emitUnaryOp(OpCode.OP_CLASS, name);
         self.defineVariable(name);
+        self.namedVariable(&class_name, false);
         self.consume(TokenType.TOKEN_LEFT_BRACE, "Expect '{' before class body.");
+        while (!self.check(TokenType.TOKEN_RIGHT_BRACE) and !self.check(TokenType.TOKEN_EOF)) {
+            self.methods();
+        }
         self.consume(TokenType.TOKEN_RIGHT_BRACE, "Expect '}' after class body.");
+        self.emitOp(OpCode.OP_POP);
     }
 
     fn funDeclaration(self: *Parser) void {
@@ -466,6 +472,14 @@ pub const Parser = struct {
             self.emitByte(if (compiler.upvalues[i].is_local) 1 else 0);
             self.emitByte(compiler.upvalues[i].index);
         }
+    }
+
+    fn methods(self: *Parser) void {
+        self.consume(TokenType.TOKEN_IDENTIFIER, "Expect method name.");
+        const constant = self.identifierConstant(&self.previous);
+        self.function(.TYPE_FUNCTION);
+
+        self.emitUnaryOp(OpCode.OP_METHOD, constant);
     }
 
     fn number(self: *Parser, _: bool) void {
