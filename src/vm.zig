@@ -130,6 +130,15 @@ pub const VM = struct {
                 OpCode.OP_METHOD => {
                     self.defineMethod(self.readString());
                 },
+                OpCode.OP_INVOKE => {
+                    const method = self.readString();
+                    const arg_acount = self.readByte();
+                    if (!self.invoke(method, arg_acount)) {
+                        return InterpretError.RUNTIME_ERROR;
+                    }
+
+                    frame = &self.frames[self.frame_count - 1];
+                },
                 OpCode.OP_CLOSURE => {
                     const func = self.readConstant().obj.asFunction();
                     const closure = Obj.Closure.create(self, func);
@@ -495,6 +504,34 @@ pub const VM = struct {
                 return false;
             },
         }
+    }
+
+    fn invokeFromClass(self: *VM, class: *Obj.Class, name: *Obj.String, arg_acount: u8) bool {
+        var method: Value = undefined;
+        if (!class.methods.get(name, &method)) {
+            self.runtimeError("Undefined property '{s}'.", .{name.chars});
+            return false;
+        }
+
+        return self.call(Obj.asClosure(method.obj), arg_acount);
+    }
+
+    fn invoke(self: *VM, name: *Obj.String, arg_acount: u8) bool {
+        const receiver = self.peek(arg_acount);
+        if (!Obj.isA(receiver, .Instance)) {
+            self.runtimeError("Only instances have methods.", .{});
+            return false;
+        }
+
+        const instance = Obj.asInstance(receiver.obj);
+
+        var value: Value = undefined;
+        if (instance.fields.get(name, &value)) {
+            self.stack[self.stack_top - arg_acount - 1] = value;
+            return self.callValue(value, arg_acount);
+        }
+
+        return self.invokeFromClass(instance.class, name, arg_acount);
     }
 
     fn bindMethod(self: *VM, class: *Obj.Class, name: *Obj.String) bool {

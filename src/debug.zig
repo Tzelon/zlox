@@ -36,6 +36,7 @@ pub fn disassembleInstruction(chunk: *Chunk, offset: usize) usize {
         OpCode.OP_CONSTANT => constantInstruction("OP_CONSTANT", chunk, offset),
         OpCode.OP_CLASS => constantInstruction("OP_CLASS", chunk, offset),
         OpCode.OP_METHOD => constantInstruction("OP_METHOD", chunk, offset),
+        OpCode.OP_INVOKE => invokeInstruction("OP_INVOKE", chunk, offset),
         OpCode.OP_CLOSE_UPVALUE => simpleInstruction("OP_CLOSE_UPVALUE", chunk, offset),
         OpCode.OP_ADD => simpleInstruction("OP_ADD", offset),
         OpCode.OP_SUBTRACT => simpleInstruction("OP_SUBSTACT", offset),
@@ -80,6 +81,17 @@ pub fn jumpInstruction(name: []const u8, sign: u16, chunk: *Chunk, offset: usize
     var jump = @as(u16, chunk.code.items[offset + 1]) << 8;
     jump |= chunk.code.items[offset + 2];
     std.debug.print("{s: <20}     {d} -> {d}\n", .{ name, offset, offset + 3 + sign * jump });
+
+    return offset + 3;
+}
+
+pub fn invokeInstruction(name: []const u8, chunk: *Chunk, offset: usize) usize {
+    const constant = chunk.code.items[offset + 1];
+    const arg_count = chunk.code.items[offset + 2];
+
+    std.debug.print("{s: <20} ({d} args) {d}", .{ name, arg_count, constant });
+    try chunk.constants.items[constant].printValue();
+    std.debug.print("'\n", .{});
 
     return offset + 3;
 }

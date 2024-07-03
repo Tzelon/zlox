@@ -596,6 +596,10 @@ pub const Parser = struct {
         if (can_assign and self.match(TokenType.TOKEN_EQUAL)) {
             self.expression();
             self.emitUnaryOp(OpCode.OP_SET_PROPERTY, name);
+        } else if (self.match(TokenType.TOKEN_LEFT_PAREN)) {
+            const arg_count = self.argumentList();
+            self.emitUnaryOp(OpCode.OP_INVOKE, name);
+            self.emitByte(arg_count);
         } else {
             self.emitUnaryOp(OpCode.OP_GET_PROPERTY, name);
         }
