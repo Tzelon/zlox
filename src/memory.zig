@@ -104,6 +104,7 @@ pub const GCAllocator = struct {
         }
 
         self.markCompilerRoots();
+        self.markObject(&self.vm.?.init_string.?.obj);
     }
 
     fn markValue(self: *GCAllocator, value: *Value) void {

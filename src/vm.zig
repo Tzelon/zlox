@@ -37,6 +37,7 @@ pub const VM = struct {
     stack_top: usize = 0,
     allocator: Allocator,
     strings: Table,
+    init_string: ?*Obj.String = null,
     open_upvalues: ?*Obj.Upvalue,
     /// pointer to the head of the objects list
     objects: ?*Obj,
@@ -55,6 +56,7 @@ pub const VM = struct {
         const gc_allocator = gpa.allocator();
 
         var vm = VM{ .bytes_allocated = 0, .next_gc = 1024 * 1024, .globals = Table.init(allocator), .strings = Table.init(allocator), .objects = null, .allocator = allocator, .open_upvalues = null, .gray_stack = std.ArrayList(*Obj).init(gc_allocator) };
+        vm.init_string = Obj.String.copy(&vm, "init");
 
         vm.defineNative("clock", clockNative);
 
@@ -65,6 +67,7 @@ pub const VM = struct {
         self.strings.deinit();
         self.globals.deinit();
         self.gray_stack.deinit();
+        self.init_string = null;
         self.freeObjects();
     }
 
@@ -467,10 +470,18 @@ pub const VM = struct {
                     Obj.Type.Class => {
                         const class = obj.asClass();
                         self.stack[self.stack_top - arg_acount - 1] = Value.fromObj(&Obj.Instance.create(self, class).obj);
+                        var initializer: Value = undefined;
+                        if (class.methods.get(self.init_string.?, &initializer)) {
+                            return self.call(Obj.asClosure(initializer.obj), arg_acount);
+                        } else if (arg_acount != 0) {
+                            self.runtimeError("Expected 0 arguments but got {d}.", .{arg_acount});
+                            return false;
+                        }
                         return true;
                     },
                     Obj.Type.BoundMethod => {
                         const bound = obj.asBoundMethod();
+                        self.stack[self.stack_top - arg_acount - 1] = bound.receiver;
                         return self.call(bound.method, arg_acount);
                     },
                     else => {

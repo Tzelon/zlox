@@ -11,7 +11,7 @@ const debug = @import("./debug.zig");
 
 const UNIT8_COUNT = std.math.maxInt(u8) + 1;
 const errout = std.io.getStdErr().writer();
-const FunctionType = enum { TYPE_FUNCTION, TYPE_SCRIPT };
+const FunctionType = enum { TYPE_FUNCTION, TYPE_SCRIPT, TYPE_METHOD, TYPE_INITIALIZER };
 const CompileError = error{ CompileError, TooManyConstants };
 var compilingChunk: *Chunk = undefined;
 
@@ -37,6 +37,10 @@ pub fn compile(vm: *VM, source: []const u8) CompileError!*Obj.Function {
     const function = parser.endCompiler();
     return if (parser.hadError) CompileError.CompileError else function;
 }
+
+const ClassCompiler = struct {
+    enclosing: ?*ClassCompiler,
+};
 
 const ParseRule = struct {
     prefix: ?ParseFn,
@@ -73,9 +77,10 @@ pub const Parser = struct {
     current: Token,
     hadError: bool = false,
     panicMode: bool = false,
+    current_class: ?*ClassCompiler,
 
     pub fn init(vm: *VM, scanner: *Scanner, compiler: *Compiler) Parser {
-        return Parser{ .scanner = scanner, .compiler = compiler, .vm = vm, .current = undefined, .previous = undefined };
+        return Parser{ .scanner = scanner, .compiler = compiler, .vm = vm, .current = undefined, .previous = undefined, .current_class = null };
     }
 
     /// advance to the next token and reports an error if found.
@@ -205,7 +210,11 @@ pub const Parser = struct {
     }
 
     fn emitReturn(self: *Parser) void {
-        self.emitOp(OpCode.OP_NIL);
+        if (self.compiler.function_type == .TYPE_INITIALIZER) {
+            self.emitUnaryOp(OpCode.OP_GET_LOCAL, 0);
+        } else {
+            self.emitOp(OpCode.OP_NIL);
+        }
         self.emitOp(OpCode.OP_RETURN);
     }
 
@@ -281,6 +290,10 @@ pub const Parser = struct {
 
         self.emitUnaryOp(OpCode.OP_CLASS, name);
         self.defineVariable(name);
+
+        var class_compiler = ClassCompiler{ .enclosing = self.current_class };
+        self.current_class = &class_compiler;
+
         self.namedVariable(&class_name, false);
         self.consume(TokenType.TOKEN_LEFT_BRACE, "Expect '{' before class body.");
         while (!self.check(TokenType.TOKEN_RIGHT_BRACE) and !self.check(TokenType.TOKEN_EOF)) {
@@ -288,6 +301,8 @@ pub const Parser = struct {
         }
         self.consume(TokenType.TOKEN_RIGHT_BRACE, "Expect '}' after class body.");
         self.emitOp(OpCode.OP_POP);
+
+        self.current_class = self.current_class.?.enclosing;
     }
 
     fn funDeclaration(self: *Parser) void {
@@ -396,6 +411,9 @@ pub const Parser = struct {
         if (self.match(TokenType.TOKEN_SEMICOLON)) {
             self.emitReturn();
         } else {
+            if (self.compiler.function_type == .TYPE_INITIALIZER) {
+                self.err("Can't return a value from an initializer.");
+            }
             self.expression();
             self.consume(TokenType.TOKEN_SEMICOLON, "Expect ';' after return value");
             self.emitOp(OpCode.OP_RETURN);
@@ -477,7 +495,10 @@ pub const Parser = struct {
     fn methods(self: *Parser) void {
         self.consume(TokenType.TOKEN_IDENTIFIER, "Expect method name.");
         const constant = self.identifierConstant(&self.previous);
-        self.function(.TYPE_FUNCTION);
+
+        const is_init = std.mem.eql(u8, self.previous.lexeme, "init");
+
+        self.function(if (is_init) .TYPE_INITIALIZER else .TYPE_METHOD);
 
         self.emitUnaryOp(OpCode.OP_METHOD, constant);
     }
@@ -520,6 +541,15 @@ pub const Parser = struct {
 
     fn variable(self: *Parser, can_assign: bool) void {
         self.namedVariable(&self.previous, can_assign);
+    }
+
+    fn this(self: *Parser, _: bool) void {
+        if (self.current_class == null) {
+            self.err("Can't use 'this' outside of a class.");
+            return;
+        }
+
+        self.variable(false);
     }
 
     fn literal(self: *Parser, _: bool) void {
@@ -655,7 +685,7 @@ pub const Parser = struct {
             TokenType.TOKEN_PRINT => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_RETURN => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_SUPER => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
-            TokenType.TOKEN_THIS => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
+            TokenType.TOKEN_THIS => comptime ParseRule.init(this, null, Precedence.PREC_NONE),
             TokenType.TOKEN_TRUE => comptime ParseRule.init(Parser.literal, null, Precedence.PREC_NONE),
             TokenType.TOKEN_VAR => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_WHILE => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
@@ -905,7 +935,11 @@ pub const Compiler = struct {
         compiler.local_count += 1;
         local.depth = 0;
         local.is_captured = false;
-        local.name.lexeme = "";
+        if (ftype != .TYPE_FUNCTION) {
+            local.name.lexeme = "this";
+        } else {
+            local.name.lexeme = "";
+        }
 
         return compiler;
     }
