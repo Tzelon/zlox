@@ -135,10 +135,10 @@ pub const Table = struct {
     }
 
     /// copy entries from one hashtable into another.
-    fn addAll(self: *Table, to: *Table) void {
+    pub fn addAll(self: *Table, to: *Table) void {
         for (self.entries) |entry| {
             if (entry.key != null) {
-                to.set(entry.key, entry.value);
+                _ = to.set(entry.key.?, entry.value);
             }
         }
     }

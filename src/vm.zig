@@ -127,8 +127,36 @@ pub const VM = struct {
                     const name = self.readString();
                     self.push(Value.fromObj(&Obj.Class.create(self, name).obj));
                 },
+                OpCode.OP_INHERIT => {
+                    const superclass = self.peek(1);
+                    if (!Obj.isA(superclass, .Class)) {
+                        self.runtimeError("Superclass must be a class.", .{});
+                        return InterpretError.RUNTIME_ERROR;
+                    }
+                    const subclass = Obj.asClass(self.peek(0).obj);
+                    Obj.asClass(superclass.obj).methods.addAll(&subclass.methods);
+                    _ = self.pop(); // subclass.
+                },
+                OpCode.OP_SUPER_INVOKE => {
+                    const method = self.readString();
+                    const arg_acount = self.readByte();
+                    const superclass = Obj.asClass(self.pop().obj);
+                    if (!self.invokeFromClass(superclass, method, arg_acount)) {
+                        return InterpretError.RUNTIME_ERROR;
+                    }
+
+                    frame = &self.frames[self.frame_count - 1];
+                },
                 OpCode.OP_METHOD => {
                     self.defineMethod(self.readString());
+                },
+                OpCode.OP_GET_SUPER => {
+                    const name = self.readString();
+                    const superclass = Obj.asClass(self.pop().obj);
+
+                    if (!self.bindMethod(superclass, name)) {
+                        return InterpretError.RUNTIME_ERROR;
+                    }
                 },
                 OpCode.OP_INVOKE => {
                     const method = self.readString();

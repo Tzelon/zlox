@@ -40,6 +40,7 @@ pub fn compile(vm: *VM, source: []const u8) CompileError!*Obj.Function {
 
 const ClassCompiler = struct {
     enclosing: ?*ClassCompiler,
+    has_superclass: bool = false,
 };
 
 const ParseRule = struct {
@@ -284,8 +285,8 @@ pub const Parser = struct {
 
     fn classDeclaration(self: *Parser) void {
         self.consume(TokenType.TOKEN_IDENTIFIER, "Expect class name");
-        var class_name = self.previous;
-        const name = self.identifierConstant(&self.previous);
+        const class_name = self.previous;
+        const name = self.identifierConstant(self.previous);
         self.declareVariable();
 
         self.emitUnaryOp(OpCode.OP_CLASS, name);
@@ -294,13 +295,33 @@ pub const Parser = struct {
         var class_compiler = ClassCompiler{ .enclosing = self.current_class };
         self.current_class = &class_compiler;
 
-        self.namedVariable(&class_name, false);
+        if (self.match(TokenType.TOKEN_LESS)) {
+            self.consume(TokenType.TOKEN_IDENTIFIER, "Expect superclass name.");
+            self.variable(false);
+            if (identifiersEqual(class_name, self.previous)) {
+                self.err("A class can't inherit from itself.");
+            }
+
+            self.beginScope();
+            self.addLocal(self.syntheticToken("super"));
+            self.defineVariable(0);
+
+            self.namedVariable(class_name, false);
+            self.emitOp(OpCode.OP_INHERIT);
+            class_compiler.has_superclass = true;
+        }
+
+        self.namedVariable(class_name, false);
         self.consume(TokenType.TOKEN_LEFT_BRACE, "Expect '{' before class body.");
         while (!self.check(TokenType.TOKEN_RIGHT_BRACE) and !self.check(TokenType.TOKEN_EOF)) {
             self.methods();
         }
         self.consume(TokenType.TOKEN_RIGHT_BRACE, "Expect '}' after class body.");
         self.emitOp(OpCode.OP_POP);
+
+        if (class_compiler.has_superclass) {
+            self.endScope();
+        }
 
         self.current_class = self.current_class.?.enclosing;
     }
@@ -494,7 +515,7 @@ pub const Parser = struct {
 
     fn methods(self: *Parser) void {
         self.consume(TokenType.TOKEN_IDENTIFIER, "Expect method name.");
-        const constant = self.identifierConstant(&self.previous);
+        const constant = self.identifierConstant(self.previous);
 
         const is_init = std.mem.eql(u8, self.previous.lexeme, "init");
 
@@ -540,7 +561,34 @@ pub const Parser = struct {
     }
 
     fn variable(self: *Parser, can_assign: bool) void {
-        self.namedVariable(&self.previous, can_assign);
+        self.namedVariable(self.previous, can_assign);
+    }
+
+    fn syntheticToken(_: *Parser, text: []const u8) Token {
+        return Token{ .lexeme = text, .type = TokenType.TOKEN_IDENTIFIER, .line = 0 };
+    }
+
+    fn super(self: *Parser, _: bool) void {
+        if (self.current_class == null) {
+            self.err("Can't user 'super' outside of a class.");
+        } else if (!self.current_class.?.has_superclass) {
+            self.err("Can't use 'super' in a class with no superclass.");
+        }
+        self.consume(TokenType.TOKEN_DOT, "Expect '.' after 'super'.");
+        self.consume(TokenType.TOKEN_IDENTIFIER, "Expect superclass method name.");
+        const name = self.identifierConstant(self.previous);
+
+        self.namedVariable(self.syntheticToken("this"), false);
+
+        if (self.match(TokenType.TOKEN_LEFT_PAREN)) {
+            const arg_count = self.argumentList();
+            self.namedVariable(self.syntheticToken("super"), false);
+            self.emitUnaryOp(OpCode.OP_SUPER_INVOKE, name);
+            self.emitByte(arg_count);
+        } else {
+            self.namedVariable(self.syntheticToken("super"), false);
+            self.emitUnaryOp(OpCode.OP_GET_SUPER, name);
+        }
     }
 
     fn this(self: *Parser, _: bool) void {
@@ -592,7 +640,7 @@ pub const Parser = struct {
 
     fn dot(self: *Parser, can_assign: bool) void {
         self.consume(TokenType.TOKEN_IDENTIFIER, "Expect property name after '.'.");
-        const name = self.identifierConstant(&self.previous);
+        const name = self.identifierConstant(self.previous);
         if (can_assign and self.match(TokenType.TOKEN_EQUAL)) {
             self.expression();
             self.emitUnaryOp(OpCode.OP_SET_PROPERTY, name);
@@ -688,7 +736,7 @@ pub const Parser = struct {
             TokenType.TOKEN_OR => comptime ParseRule.init(null, Parser.@"or", Precedence.PREC_OR),
             TokenType.TOKEN_PRINT => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
             TokenType.TOKEN_RETURN => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
-            TokenType.TOKEN_SUPER => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
+            TokenType.TOKEN_SUPER => comptime ParseRule.init(super, null, Precedence.PREC_NONE),
             TokenType.TOKEN_THIS => comptime ParseRule.init(this, null, Precedence.PREC_NONE),
             TokenType.TOKEN_TRUE => comptime ParseRule.init(Parser.literal, null, Precedence.PREC_NONE),
             TokenType.TOKEN_VAR => comptime ParseRule.init(null, null, Precedence.PREC_NONE),
@@ -700,7 +748,7 @@ pub const Parser = struct {
         return rule;
     }
 
-    fn namedVariable(self: *Parser, name: *Token, can_assign: bool) void {
+    fn namedVariable(self: *Parser, name: Token, can_assign: bool) void {
         var get_op: OpCode = undefined;
         var set_op: OpCode = undefined;
 
@@ -764,7 +812,7 @@ pub const Parser = struct {
         //so if the declaration is inside a local scope, we return a dummy table index instead.
         if (self.compiler.scope_depth > 0) return 0;
 
-        return self.identifierConstant(&self.previous);
+        return self.identifierConstant(self.previous);
     }
 
     fn defineVariable(self: *Parser, global: u8) void {
@@ -781,7 +829,7 @@ pub const Parser = struct {
     fn declareVariable(self: *Parser) void {
         if (self.compiler.scope_depth == 0) return;
 
-        const name: *Token = &self.previous;
+        const name: Token = self.previous;
 
         var i: isize = @as(isize, self.compiler.local_count) - 1;
         while (i >= 0) : (i -= 1) {
@@ -790,12 +838,12 @@ pub const Parser = struct {
                 break;
             }
 
-            if (identifiersEqual(name, &local.name)) {
+            if (identifiersEqual(name, local.name)) {
                 self.err("Already a variable with this name in this scope.");
             }
         }
 
-        self.addLocal(name.*);
+        self.addLocal(name);
     }
 
     fn markInitialized(self: *Parser) void {
@@ -807,12 +855,12 @@ pub const Parser = struct {
         locals[self.compiler.local_count - 1].depth = scope_depth;
     }
 
-    fn identifierConstant(self: *Parser, name: *Token) u8 {
+    fn identifierConstant(self: *Parser, name: Token) u8 {
         const identifier = Obj.String.copy(self.vm, name.lexeme);
         return self.makeConstant(Value.fromObj(&identifier.obj));
     }
 
-    fn identifiersEqual(a: *Token, b: *Token) bool {
+    fn identifiersEqual(a: Token, b: Token) bool {
         if (a.lexeme.len != b.lexeme.len) return false;
 
         return std.mem.eql(u8, a.lexeme, b.lexeme);
@@ -832,12 +880,12 @@ pub const Parser = struct {
         local.is_captured = false;
     }
 
-    fn resolveLocal(self: *Parser, compiler: *Compiler, name: *Token) ?u8 {
+    fn resolveLocal(self: *Parser, compiler: *Compiler, name: Token) ?u8 {
         var i: isize = compiler.local_count - 1;
 
         while (i >= 0) : (i -= 1) {
-            var local = compiler.locals[@intCast(i)];
-            if (identifiersEqual(name, &local.name)) {
+            const local = compiler.locals[@intCast(i)];
+            if (identifiersEqual(name, local.name)) {
                 if (local.depth) |_| {
                     return @intCast(i);
                 } else {
@@ -849,7 +897,7 @@ pub const Parser = struct {
         return null;
     }
 
-    fn resolveUpvalue(self: *Parser, compiler: *Compiler, name: *Token) ?u8 {
+    fn resolveUpvalue(self: *Parser, compiler: *Compiler, name: Token) ?u8 {
         if (compiler.enclosing == null) return null;
 
         if (self.resolveLocal(compiler.enclosing.?, name)) |local| {
